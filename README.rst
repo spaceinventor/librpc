@@ -14,7 +14,7 @@ Client-server communication
 Implementation
 ==============
 
-Using RSU RPC
+Using DSU RPC
 =============
 
 Development

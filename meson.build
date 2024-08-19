@@ -15,7 +15,7 @@ if gen_doc.found()
   doc = custom_target('doc',
     output : 'dsu_rpc.pdf',
     input : ['doc/dsu_rpc.rst', 'README.rst'],
-    command : ['gen-sidoc', '-t', 'MAN', 'DTP', '@INPUT0@', '-o', doc_out],
+    command : ['gen-sidoc', '-t', 'MAN', 'DSU RPC', '@INPUT0@', '-o', doc_out],
     build_by_default: false
   )
 endif
@@ -46,4 +46,4 @@ if doxygen.found()
                               build_by_default: false)
 endif
 
-dsu_rpc_dep = declare_dependency(include_directories : include, link_with : dsu_rpc_lib, dependencies: dsu_rpc_lib_dep).as_link_whole()
+#dsu_rpc_dep = declare_dependency(include_directories : include, link_with : dsu_rpc_lib, dependencies: dsu_rpc_lib_dep).as_link_whole()

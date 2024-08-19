@@ -4,7 +4,7 @@
 
 #include <csp/csp.h>
 
-#include "dsu_server.h"
+//#include "dsu_server.h"
 #include "dsu_rpc.h"
 
 static const rpc_procedure_t g_rpc_procedures[] = {

@@ -8,6 +8,8 @@
 extern "C" {
 #endif
 
+#define CSP_PORT_DSU_SERVER 9
+
 typedef enum dsu_rpc_procedure_e {
     DSU_PROCEDURE_OPEN_FIFO = 0,
     DSU_PROCEDURE_FOO = 1,
