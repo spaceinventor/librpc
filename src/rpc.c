@@ -21,24 +21,30 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
             switch (*pfmt) {
                 case 'f':
                 {
-                    float value = (float)va_arg(args, double);
-                    printf("PACK: float > %f\n", value);
+                    rpc_data_type_t value;
+                    value.flt = (float)va_arg(args, double);
+                    printf("PACK: float > %f\n", value.flt);
+                    value.u32 = htobe32(value.u32);
                     memcpy(&(call->data[data_len]), &value, sizeof(float));
                     data_len += sizeof(float);
                 }
                 break;
                 case 'd':
                 {
-                    double value = (double)va_arg(args, double);
-                    printf("PACK: double > %f\n", value);
+                    rpc_data_type_t value;
+                    value.dbl = (double)va_arg(args, double);
+                    printf("PACK: double > %f\n", value.dbl);
+                    value.u64 = htobe64(value.u64);
                     memcpy(&(call->data[data_len]), &value, sizeof(double));
                     data_len += sizeof(double);
                 }
                 break;
                 case 'D':
                 {
-                    long double value = (long double)va_arg(args, long double);
-                    printf("PACK: long double > %Lf\n", value);
+                    rpc_data_type_t value;
+                    value.ldbl = (long double)va_arg(args, long double);
+                    printf("PACK: long double > %Lf\n", value.ldbl);
+                    value.u64 = htobe64(value.u64);
                     memcpy(&(call->data[data_len]), &value, sizeof(long double));
                     data_len += sizeof(long double);
                 }
@@ -201,7 +207,7 @@ static void rpc_unpack_call_reply(rpc_client_t *me, rpc_reply_t *reply, uint32_t
                 case 'f':
                 {
                     memcpy(res_val, &reply->data[offset], sizeof(res_val->flt));
-                    res_val->flt = be32toh(res_val->flt);
+                    res_val->u32 = be32toh(res_val->u32);
                     printf("UNPACK: float -> %f\n", res_val->flt);
                     offset += sizeof(res_val->flt);
                 }
@@ -209,7 +215,7 @@ static void rpc_unpack_call_reply(rpc_client_t *me, rpc_reply_t *reply, uint32_t
                 case 'd':
                 {
                     memcpy(res_val, &reply->data[offset], sizeof(res_val->dbl));
-                    res_val->dbl = be64toh(res_val->dbl);
+                    res_val->u64 = be64toh(res_val->u64);
                     printf("UNPACK: double -> %f\n", res_val->dbl);
                     offset += sizeof(res_val->dbl);
                 }
@@ -217,7 +223,7 @@ static void rpc_unpack_call_reply(rpc_client_t *me, rpc_reply_t *reply, uint32_t
                 case 'D':
                 {
                     memcpy(res_val, &reply->data[offset], sizeof(res_val->ldbl));
-                    res_val->ldbl = be64toh(res_val->dbl);
+                    res_val->u64 = be64toh(res_val->u64);
                     printf("UNPACK: long double -> %Lf\n", res_val->ldbl);
                     offset += sizeof(res_val->ldbl);
                 }
@@ -363,8 +369,10 @@ void rpc_result_push_float(rpc_server_t *me, float value, csp_packet_t *result) 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
-    value = htobe32(value);
-    memcpy(&reply->data[data_len], &value, sizeof(float));
+    rpc_data_type_t v;
+    v.flt = value;
+    v.u32 = htobe32(v.u32);
+    memcpy(&reply->data[data_len], &v, sizeof(float));
     data_len += sizeof(float);
     reply->data_len = htobe16(data_len);
 
@@ -377,8 +385,10 @@ void rpc_result_push_double(rpc_server_t *me, double value, csp_packet_t *result
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
-    value = htobe64(value);
-    memcpy(&reply->data[data_len], &value, sizeof(double));
+    rpc_data_type_t v;
+    v.dbl = value;
+    v.u64 = htobe64(v.u64);
+    memcpy(&reply->data[data_len], &v, sizeof(double));
     data_len += sizeof(double);
     reply->data_len = htobe16(data_len);
 
@@ -391,8 +401,10 @@ void rpc_result_push_long_double(rpc_server_t *me, long double value, csp_packet
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
-    value = htobe64(value);
-    memcpy(&reply->data[data_len], &value, sizeof(long double));
+    rpc_data_type_t v;
+    v.ldbl = value;
+    v.u64 = htobe64(v.u64);
+    memcpy(&reply->data[data_len], &v, sizeof(long double));
     data_len += sizeof(long double);
     reply->data_len = htobe16(data_len);
 
