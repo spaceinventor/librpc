@@ -140,7 +140,6 @@ typedef union rpc_data_type_u {
     uint64_t    u64;
     float       flt;
     double      dbl;
-    long double ldbl;
 } rpc_data_type_t;
 
 extern int rpc_connect(rpc_client_t *me, uint16_t node);
@@ -153,13 +152,13 @@ extern csp_conn_t * rpc_waitfor_connections(rpc_server_t *me);
 
 extern csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc_server_callback_t *cb);
 extern csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg);
+
 extern void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, csp_packet_t *result);
 extern void rpc_result_push_int16(rpc_server_t *me, int16_t value, csp_packet_t *result);
 extern void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, csp_packet_t *result);
 extern void rpc_result_push_int32(rpc_server_t *me, int32_t value, csp_packet_t *result);
 extern void rpc_result_push_float(rpc_server_t *me, float value, csp_packet_t *result);
 extern void rpc_result_push_double(rpc_server_t *me, double value, csp_packet_t *result);
-extern void rpc_result_push_long_double(rpc_server_t *me, long double value, csp_packet_t *result);
 
 #ifdef __cplusplus
 }

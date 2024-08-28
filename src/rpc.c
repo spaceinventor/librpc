@@ -39,16 +39,6 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
                     data_len += sizeof(double);
                 }
                 break;
-                case 'D':
-                {
-                    rpc_data_type_t value;
-                    value.ldbl = (long double)va_arg(args, long double);
-                    printf("PACK: long double > %Lf\n", value.ldbl);
-                    value.u64 = htobe64(value.u64);
-                    memcpy(&(call->data[data_len]), &value, sizeof(long double));
-                    data_len += sizeof(long double);
-                }
-                break;
                 case 'b':
                 {
                     int8_t value = (int8_t)va_arg(args, int);
@@ -220,14 +210,6 @@ static void rpc_unpack_call_reply(rpc_client_t *me, rpc_reply_t *reply, uint32_t
                     offset += sizeof(res_val->dbl);
                 }
                 break;
-                case 'D':
-                {
-                    memcpy(res_val, &reply->data[offset], sizeof(res_val->ldbl));
-                    res_val->u64 = be64toh(res_val->u64);
-                    printf("UNPACK: long double -> %Lf\n", res_val->ldbl);
-                    offset += sizeof(res_val->ldbl);
-                }
-                break;
             }
 
             pfmt++;
@@ -393,22 +375,6 @@ void rpc_result_push_double(rpc_server_t *me, double value, csp_packet_t *result
     reply->data_len = htobe16(data_len);
 
     result->length += sizeof(double);
-}
-
-void rpc_result_push_long_double(rpc_server_t *me, long double value, csp_packet_t *result) {
-
-    rpc_msg_t *msg = (rpc_msg_t *)result->data;
-    rpc_reply_t *reply = &msg->reply;
-    uint16_t data_len = be16toh(reply->data_len);
-
-    rpc_data_type_t v;
-    v.ldbl = value;
-    v.u64 = htobe64(v.u64);
-    memcpy(&reply->data[data_len], &v.u64, sizeof(long double));
-    data_len += sizeof(long double);
-    reply->data_len = htobe16(data_len);
-
-    result->length += sizeof(long double);
 }
 
 csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc_server_callback_t *cb) {
