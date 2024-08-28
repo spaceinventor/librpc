@@ -103,9 +103,9 @@ typedef struct rpc_server_s rpc_server_t;
  * @param procedure The procedure to execute on the specified program
  * @param data_len Length of the data field
  * @param data Procedure arguments packed as Big Endian according to out-of-band format
- * @param result Pointer to a CSP packet which will receive the procedure return objects
+ * @param reply Pointer to a rpc_msg_t packet which will receive the procedure return objects
  */
-typedef void rpc_server_callback_t(rpc_server_t *me, uint32_t program, uint32_t procedure, uint16_t data_len, uint8_t *data, csp_packet_t *result);
+typedef void rpc_server_callback_t(rpc_server_t *me, uint32_t program, uint32_t procedure, uint16_t data_len, uint8_t *data, rpc_msg_t *reply);
 
 /**
  * @brief RPC procedure lookup method prototype
@@ -153,12 +153,12 @@ extern csp_conn_t * rpc_waitfor_connections(rpc_server_t *me);
 extern csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc_server_callback_t *cb);
 extern csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg);
 
-extern void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, csp_packet_t *result);
-extern void rpc_result_push_int16(rpc_server_t *me, int16_t value, csp_packet_t *result);
-extern void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, csp_packet_t *result);
-extern void rpc_result_push_int32(rpc_server_t *me, int32_t value, csp_packet_t *result);
-extern void rpc_result_push_float(rpc_server_t *me, float value, csp_packet_t *result);
-extern void rpc_result_push_double(rpc_server_t *me, double value, csp_packet_t *result);
+extern void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, rpc_msg_t *msg);
+extern void rpc_result_push_int16(rpc_server_t *me, int16_t value, rpc_msg_t *msg);
+extern void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, rpc_msg_t *msg);
+extern void rpc_result_push_int32(rpc_server_t *me, int32_t value, rpc_msg_t *msg);
+extern void rpc_result_push_float(rpc_server_t *me, float value, rpc_msg_t *msg);
+extern void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg);
 
 #ifdef __cplusplus
 }
