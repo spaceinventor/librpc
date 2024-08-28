@@ -372,7 +372,7 @@ void rpc_result_push_float(rpc_server_t *me, float value, csp_packet_t *result) 
     rpc_data_type_t v;
     v.flt = value;
     v.u32 = htobe32(v.u32);
-    memcpy(&reply->data[data_len], &v, sizeof(float));
+    memcpy(&reply->data[data_len], &v.u32, sizeof(float));
     data_len += sizeof(float);
     reply->data_len = htobe16(data_len);
 
@@ -388,7 +388,7 @@ void rpc_result_push_double(rpc_server_t *me, double value, csp_packet_t *result
     rpc_data_type_t v;
     v.dbl = value;
     v.u64 = htobe64(v.u64);
-    memcpy(&reply->data[data_len], &v, sizeof(double));
+    memcpy(&reply->data[data_len], &v.u64, sizeof(double));
     data_len += sizeof(double);
     reply->data_len = htobe16(data_len);
 
@@ -404,7 +404,7 @@ void rpc_result_push_long_double(rpc_server_t *me, long double value, csp_packet
     rpc_data_type_t v;
     v.ldbl = value;
     v.u64 = htobe64(v.u64);
-    memcpy(&reply->data[data_len], &v, sizeof(long double));
+    memcpy(&reply->data[data_len], &v.u64, sizeof(long double));
     data_len += sizeof(long double);
     reply->data_len = htobe16(data_len);
 
