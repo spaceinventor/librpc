@@ -289,9 +289,8 @@ csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg) {
     return packet;
 }
 
-void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, csp_packet_t *result) {
+void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, rpc_msg_t *msg) {
 
-    rpc_msg_t *msg = (rpc_msg_t *)result->data;
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
@@ -299,13 +298,10 @@ void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, csp_packet_t *resu
     memcpy(&reply->data[data_len], &value, sizeof(uint32_t));
     data_len += sizeof(uint32_t);
     reply->data_len = htobe16(data_len);
-
-    result->length += sizeof(uint32_t);
 }
 
-void rpc_result_push_int32(rpc_server_t *me, int32_t value, csp_packet_t *result) {
+void rpc_result_push_int32(rpc_server_t *me, int32_t value, rpc_msg_t *msg) {
 
-    rpc_msg_t *msg = (rpc_msg_t *)result->data;
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
@@ -313,13 +309,10 @@ void rpc_result_push_int32(rpc_server_t *me, int32_t value, csp_packet_t *result
     memcpy(&reply->data[data_len], &value, sizeof(int32_t));
     data_len += sizeof(int32_t);
     reply->data_len = htobe16(data_len);
-
-    result->length += sizeof(int32_t);
 }
 
-void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, csp_packet_t *result) {
+void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, rpc_msg_t *msg) {
 
-    rpc_msg_t *msg = (rpc_msg_t *)result->data;
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
@@ -327,13 +320,10 @@ void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, csp_packet_t *resu
     memcpy(&reply->data[data_len], &value, sizeof(uint16_t));
     data_len += sizeof(uint16_t);
     reply->data_len = htobe16(data_len);
-
-    result->length += sizeof(uint16_t);
 }
 
-void rpc_result_push_int16(rpc_server_t *me, int16_t value, csp_packet_t *result) {
+void rpc_result_push_int16(rpc_server_t *me, int16_t value, rpc_msg_t *msg) {
 
-    rpc_msg_t *msg = (rpc_msg_t *)result->data;
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
@@ -341,13 +331,10 @@ void rpc_result_push_int16(rpc_server_t *me, int16_t value, csp_packet_t *result
     memcpy(&reply->data[data_len], &value, sizeof(int16_t));
     data_len += sizeof(int16_t);
     reply->data_len = htobe16(data_len);
-
-    result->length += sizeof(int16_t);
 }
 
-void rpc_result_push_float(rpc_server_t *me, float value, csp_packet_t *result) {
+void rpc_result_push_float(rpc_server_t *me, float value, rpc_msg_t *msg) {
 
-    rpc_msg_t *msg = (rpc_msg_t *)result->data;
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
@@ -357,13 +344,10 @@ void rpc_result_push_float(rpc_server_t *me, float value, csp_packet_t *result) 
     memcpy(&reply->data[data_len], &v.u32, sizeof(float));
     data_len += sizeof(float);
     reply->data_len = htobe16(data_len);
-
-    result->length += sizeof(float);
 }
 
-void rpc_result_push_double(rpc_server_t *me, double value, csp_packet_t *result) {
+void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg) {
 
-    rpc_msg_t *msg = (rpc_msg_t *)result->data;
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
@@ -373,8 +357,6 @@ void rpc_result_push_double(rpc_server_t *me, double value, csp_packet_t *result
     memcpy(&reply->data[data_len], &v.u64, sizeof(double));
     data_len += sizeof(double);
     reply->data_len = htobe16(data_len);
-
-    result->length += sizeof(double);
 }
 
 csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc_server_callback_t *cb) {
@@ -394,7 +376,9 @@ csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc_server
             reply = rpc_result_prepare(me, req_msg);
 
             if (cb) {
-                (*cb)(me, program, procedure, data_len, &req_msg->call.data[0], reply);
+                rpc_msg_t *reply_msg = (rpc_msg_t *)reply->data;
+                (*cb)(me, program, procedure, data_len, &req_msg->call.data[0], reply_msg);
+                reply->length += be32toh(reply_msg->reply.data_len);
             }
 
         }
