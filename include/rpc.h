@@ -157,6 +157,9 @@ extern void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, csp_packet_
 extern void rpc_result_push_int16(rpc_server_t *me, int16_t value, csp_packet_t *result);
 extern void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, csp_packet_t *result);
 extern void rpc_result_push_int32(rpc_server_t *me, int32_t value, csp_packet_t *result);
+extern void rpc_result_push_float(rpc_server_t *me, float value, csp_packet_t *result);
+extern void rpc_result_push_double(rpc_server_t *me, double value, csp_packet_t *result);
+extern void rpc_result_push_long_double(rpc_server_t *me, long double value, csp_packet_t *result);
 
 #ifdef __cplusplus
 }

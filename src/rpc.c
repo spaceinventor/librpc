@@ -329,6 +329,76 @@ void rpc_result_push_int32(rpc_server_t *me, int32_t value, csp_packet_t *result
     result->length += sizeof(int32_t);
 }
 
+void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, csp_packet_t *result) {
+
+    rpc_msg_t *msg = (rpc_msg_t *)result->data;
+    rpc_reply_t *reply = &msg->reply;
+    uint16_t data_len = be16toh(reply->data_len);
+
+    value = htobe16(value);
+    memcpy(&reply->data[data_len], &value, sizeof(uint16_t));
+    data_len += sizeof(uint16_t);
+    reply->data_len = htobe16(data_len);
+
+    result->length += sizeof(uint16_t);
+}
+
+void rpc_result_push_int16(rpc_server_t *me, int16_t value, csp_packet_t *result) {
+
+    rpc_msg_t *msg = (rpc_msg_t *)result->data;
+    rpc_reply_t *reply = &msg->reply;
+    uint16_t data_len = be16toh(reply->data_len);
+
+    value = htobe16(value);
+    memcpy(&reply->data[data_len], &value, sizeof(int16_t));
+    data_len += sizeof(int16_t);
+    reply->data_len = htobe16(data_len);
+
+    result->length += sizeof(int16_t);
+}
+
+void rpc_result_push_float(rpc_server_t *me, float value, csp_packet_t *result) {
+
+    rpc_msg_t *msg = (rpc_msg_t *)result->data;
+    rpc_reply_t *reply = &msg->reply;
+    uint16_t data_len = be16toh(reply->data_len);
+
+    value = htobe32(value);
+    memcpy(&reply->data[data_len], &value, sizeof(float));
+    data_len += sizeof(float);
+    reply->data_len = htobe16(data_len);
+
+    result->length += sizeof(float);
+}
+
+void rpc_result_push_double(rpc_server_t *me, double value, csp_packet_t *result) {
+
+    rpc_msg_t *msg = (rpc_msg_t *)result->data;
+    rpc_reply_t *reply = &msg->reply;
+    uint16_t data_len = be16toh(reply->data_len);
+
+    value = htobe64(value);
+    memcpy(&reply->data[data_len], &value, sizeof(double));
+    data_len += sizeof(double);
+    reply->data_len = htobe16(data_len);
+
+    result->length += sizeof(double);
+}
+
+void rpc_result_push_long_double(rpc_server_t *me, long double value, csp_packet_t *result) {
+
+    rpc_msg_t *msg = (rpc_msg_t *)result->data;
+    rpc_reply_t *reply = &msg->reply;
+    uint16_t data_len = be16toh(reply->data_len);
+
+    value = htobe64(value);
+    memcpy(&reply->data[data_len], &value, sizeof(long double));
+    data_len += sizeof(long double);
+    reply->data_len = htobe16(data_len);
+
+    result->length += sizeof(long double);
+}
+
 csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc_server_callback_t *cb) {
 
     rpc_msg_t *req_msg = (rpc_msg_t *)packet->data;
