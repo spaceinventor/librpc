@@ -100,83 +100,84 @@ static void rpc_unpack_call_reply(rpc_client_t *me, rpc_reply_t *reply, uint32_t
     /* Lookup the RPC procedure format */
     rpc_procedure_t *rpc = me->api->lookup(procedure);
     
-    /* Grab the length of the result buffer */
+    /* Grab the data length */
     uint16_t data_len = be16toh(reply->data_len);
+    uint16_t offset = 0;
 
     if (rpc) {
         printf("unpack: %s - '%s'\n", rpc->name, rpc->res_fmt);
         const char *pfmt = rpc->res_fmt;
-        while (*pfmt != '\0' && data_len > 0) {
+        while (*pfmt != '\0' && offset < data_len) {
             rpc_data_type_t value;
             switch (*pfmt) {
                 case 'Q':
                 {
-                    data_len -= sizeof(value.u64);
-                    memcpy(&value, &reply->data[data_len], sizeof(value));
+                    memcpy(&value, &reply->data[offset], sizeof(value));
                     value.u64 = be64toh(value.u64);
                     printf("UNPACK: uint64_t -> %"PRIu64"\n", value.u64);
                     *(uint64_t *)ret = value.u64;
+                    offset += sizeof(value.u64);
                 }
                 break;
                 case 'q':
                 {
-                    data_len -= sizeof(value.i64);
-                    memcpy(&value, &reply->data[data_len], sizeof(value.i64));
+                    memcpy(&value, &reply->data[offset], sizeof(value.i64));
                     value.i64 = be64toh(value.i64);
                     printf("UNPACK: int64_t -> %"PRIi64"\n", value.i64);
                     *(int64_t *)ret = value.i64;
+                    offset += sizeof(value.i64);
                 }
                 break;
                 case 'L':
                 {
-                    data_len -= sizeof(value.u32);
-                    memcpy(&value, &reply->data[data_len], sizeof(value));
+                    memcpy(&value, &reply->data[offset], sizeof(value));
                     value.u32 = be32toh(value.u32);
                     printf("UNPACK: uint32_t -> %"PRIu32"\n", value.u32);
                     *(uint32_t *)ret = value.u32;
+                    offset += sizeof(value.u32);
                 }
                 break;
                 case 'l':
                 {
-                    data_len -= sizeof(value.i32);
-                    memcpy(&value, &reply->data[data_len], sizeof(value.i32));
+                    memcpy(&value, &reply->data[offset], sizeof(value.i32));
                     value.i32 = be32toh(value.i32);
                     printf("UNPACK: int32_t -> %"PRIi32"\n", value.i32);
                     *(int32_t *)ret = value.i32;
+                    offset += sizeof(value.i32);
                 }
                 break;
                 case 'H':
                 {
-                    data_len -= sizeof(value.u16);
-                    memcpy(&value, &reply->data[data_len], sizeof(value.u16));
+                    memcpy(&value, &reply->data[offset], sizeof(value.u16));
                     value.u16 = be16toh(value.u16);
                     printf("UNPACK: uint16_t -> %"PRIu16"\n", value.u16);
                     *(uint16_t *)ret = value.u16;
+                    offset += sizeof(value.u16);
                 }
                 break;
                 case 'h':
                 {
-                    data_len -= sizeof(value.i16);
-                    memcpy(&value, &reply->data[data_len], sizeof(value.i16));
+                    memcpy(&value, &reply->data[offset], sizeof(value.i16));
                     value.i16 = be16toh(value.i16);
                     printf("UNPACK: int16_t -> %"PRIi16"\n", value.i16);
                     *(int16_t *)ret = value.i16;
+                    offset += sizeof(value.i16);
                 }
                 break;
                 case 'B':
                 {
-                    data_len -= sizeof(value.u8);
-                    memcpy(&value, &reply->data[data_len], sizeof(value.u8));
+                    memcpy(&value, &reply->data[offset], sizeof(value.u8));
                     printf("UNPACK: uint8_t -> %"PRIu8"\n", value.u8);
                     *(uint8_t *)ret = value.u8;
+                    offset += sizeof(value.u8);
                 }
                 break;
                 case 'b':
                 {
-                    data_len -= sizeof(value.i8);
-                    memcpy(&value, &reply->data[data_len], sizeof(value.i8));
+                    memcpy(&value, &reply->data[offset], sizeof(value.i8));
                     printf("UNPACK: int8_t -> %"PRIi8"\n", value.i8);
                     *(int8_t *)ret = value.i8;
+                    offset += sizeof(value.i8);
                 }
                 break;
             }
