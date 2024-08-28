@@ -378,7 +378,7 @@ csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc_server
             if (cb) {
                 rpc_msg_t *reply_msg = (rpc_msg_t *)reply->data;
                 (*cb)(me, program, procedure, data_len, &req_msg->call.data[0], reply_msg);
-                reply->length += be32toh(reply_msg->reply.data_len);
+                reply->length += be16toh(reply_msg->reply.data_len);
             }
 
         }
