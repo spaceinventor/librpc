@@ -206,7 +206,7 @@ static void rpc_unpack_call_reply(rpc_client_t *me, rpc_reply_t *reply, uint32_t
                 {
                     memcpy(res_val, &reply->data[offset], sizeof(res_val->dbl));
                     res_val->u64 = be64toh(res_val->u64);
-                    printf("UNPACK: double -> %f\n", res_val->dbl);
+                    printf("UNPACK: double -> %0.15f\n", res_val->dbl);
                     offset += sizeof(res_val->dbl);
                 }
                 break;
