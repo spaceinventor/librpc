@@ -19,6 +19,30 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
         const char *pfmt = rpc->arg_fmt;
         while (*pfmt != '\0') {
             switch (*pfmt) {
+                case 'f':
+                {
+                    float value = (float)va_arg(args, double);
+                    printf("PACK: float > %f\n", value);
+                    memcpy(&(call->data[data_len]), &value, sizeof(float));
+                    data_len += sizeof(float);
+                }
+                break;
+                case 'd':
+                {
+                    double value = (double)va_arg(args, double);
+                    printf("PACK: double > %f\n", value);
+                    memcpy(&(call->data[data_len]), &value, sizeof(double));
+                    data_len += sizeof(double);
+                }
+                break;
+                case 'D':
+                {
+                    long double value = (long double)va_arg(args, long double);
+                    printf("PACK: long double > %Lf\n", value);
+                    memcpy(&(call->data[data_len]), &value, sizeof(long double));
+                    data_len += sizeof(long double);
+                }
+                break;
                 case 'b':
                 {
                     int8_t value = (int8_t)va_arg(args, int);
@@ -172,6 +196,30 @@ static void rpc_unpack_call_reply(rpc_client_t *me, rpc_reply_t *reply, uint32_t
                     res_val->i8 = res_val->i8;
                     printf("UNPACK: int8_t -> %"PRIi8"\n", res_val->i8);
                     offset += sizeof(res_val->i8);
+                }
+                break;
+                case 'f':
+                {
+                    memcpy(res_val, &reply->data[offset], sizeof(res_val->flt));
+                    res_val->flt = be32toh(res_val->flt);
+                    printf("UNPACK: float -> %f\n", res_val->flt);
+                    offset += sizeof(res_val->flt);
+                }
+                break;
+                case 'd':
+                {
+                    memcpy(res_val, &reply->data[offset], sizeof(res_val->dbl));
+                    res_val->dbl = be64toh(res_val->dbl);
+                    printf("UNPACK: double -> %f\n", res_val->dbl);
+                    offset += sizeof(res_val->dbl);
+                }
+                break;
+                case 'D':
+                {
+                    memcpy(res_val, &reply->data[offset], sizeof(res_val->ldbl));
+                    res_val->ldbl = be64toh(res_val->dbl);
+                    printf("UNPACK: long double -> %Lf\n", res_val->ldbl);
+                    offset += sizeof(res_val->ldbl);
                 }
                 break;
             }
