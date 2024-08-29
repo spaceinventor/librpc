@@ -290,6 +290,8 @@ int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
     rpc_procedure_t *rpc = me->api->lookup(be32toh(msg->call.procedure));
     uint16_t data_len = be16toh(msg->call.data_len);
 
+    printf("deserializing_call: data_len=%"PRId16",procedure:%"PRIu32"\n", data_len, be32toh(msg->call.procedure);
+
     uint8_t dummy[1024];
 
     if (rpc) {
@@ -434,13 +436,13 @@ void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg) {
     reply->data_len = htobe16(data_len);
 }
 
-static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc_server_callback_t *cb) {
+static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc_server_callback_t *handler) {
 
     rpc_msg_t *req_msg = (rpc_msg_t *)packet->data;
     csp_packet_t *reply = NULL;
 
     if (req_msg->version != RPC_VERSION) {
-        printf("ERROR: Wrong RPC version in reply.\n");
+        printf("ERROR: Wrong RPC version in message.\n");
         return NULL;
     }
 
@@ -451,14 +453,15 @@ static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc
             uint32_t program = be32toh(req_msg->call.program);
             uint32_t procedure = be32toh(req_msg->call.procedure);
 
-            printf("rpc_msg: data_len=%"PRId16",program=0x%"PRIX32",procedure=%"PRIu32"\n", data_len, program, procedure);
+            printf("rpc_msg_call: data_len=%"PRId16",program=0x%"PRIX32",procedure=%"PRIu32"\n", data_len, program, procedure);
 
             reply = rpc_result_prepare(me, req_msg);
 
-            if (cb) {
+            if (handler) {
                 rpc_msg_t *reply_msg = (rpc_msg_t *)reply->data;
-                (*cb)(me, program, procedure, req_msg, reply_msg);
+                (*handler)(me, program, procedure, req_msg, reply_msg);
                 reply->length += be16toh(reply_msg->reply.data_len);
+                printf("rpc_msg_reply: data_len=%"PRId16"\n", be16toh(reply_msg->reply.data_len));
             }
 
         }

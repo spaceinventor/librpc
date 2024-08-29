@@ -155,7 +155,7 @@ extern int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedur
 extern int rpc_start_server(rpc_server_t *me);
 extern int rpc_stop_server(rpc_server_t *me);
 extern csp_conn_t * rpc_waitfor_connections(rpc_server_t *me);
-extern bool rpc_handle_connection(rpc_server_t *me, csp_conn_t *conn, rpc_server_callback_t *cb);
+extern bool rpc_handle_connection(rpc_server_t *me, csp_conn_t *conn, rpc_server_callback_t *handler);
 extern int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...);
 extern csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg);
 
