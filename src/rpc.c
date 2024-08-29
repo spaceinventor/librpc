@@ -233,33 +233,37 @@ static uint16_t rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, va_list
     return offset;
 }
 
-void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, rpc_msg_t *msg) {
+void rpc_result_push_uint8(rpc_server_t *me, uint8_t value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
-    value = htobe32(value);
-    memcpy(&reply->data[data_len], &value, sizeof(uint32_t));
-    data_len += sizeof(uint32_t);
+    printf("RESPUSH: uint8_t -> %"PRIu8"\n", value);
+    value = value;
+    memcpy(&reply->data[data_len], &value, sizeof(uint8_t));
+    data_len += sizeof(uint8_t);
     reply->data_len = htobe16(data_len);
 }
 
-void rpc_result_push_int32(rpc_server_t *me, int32_t value, rpc_msg_t *msg) {
+void rpc_result_push_int8(rpc_server_t *me, int8_t value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
-    value = htobe32(value);
-    memcpy(&reply->data[data_len], &value, sizeof(int32_t));
-    data_len += sizeof(int32_t);
+    printf("RESPUSH: int8_t -> %"PRIi8"\n", value);
+    value = value;
+    memcpy(&reply->data[data_len], &value, sizeof(int8_t));
+    data_len += sizeof(int8_t);
     reply->data_len = htobe16(data_len);
 }
+
 
 void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
+    printf("RESPUSH: uint16_t -> %"PRIu16"\n", value);
     value = htobe16(value);
     memcpy(&reply->data[data_len], &value, sizeof(uint16_t));
     data_len += sizeof(uint16_t);
@@ -271,9 +275,58 @@ void rpc_result_push_int16(rpc_server_t *me, int16_t value, rpc_msg_t *msg) {
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
+    printf("RESPUSH: int16_t -> %"PRIi16"\n", value);
     value = htobe16(value);
     memcpy(&reply->data[data_len], &value, sizeof(int16_t));
     data_len += sizeof(int16_t);
+    reply->data_len = htobe16(data_len);
+}
+
+void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, rpc_msg_t *msg) {
+
+    rpc_reply_t *reply = &msg->reply;
+    uint16_t data_len = be16toh(reply->data_len);
+
+    printf("RESPUSH: uint32_t -> %"PRIu32"\n", value);
+    value = htobe32(value);
+    memcpy(&reply->data[data_len], &value, sizeof(uint32_t));
+    data_len += sizeof(uint32_t);
+    reply->data_len = htobe16(data_len);
+}
+
+void rpc_result_push_int32(rpc_server_t *me, int32_t value, rpc_msg_t *msg) {
+
+    rpc_reply_t *reply = &msg->reply;
+    uint16_t data_len = be16toh(reply->data_len);
+
+    printf("RESPUSH: int32_t -> %"PRIi32"\n", value);
+    value = htobe32(value);
+    memcpy(&reply->data[data_len], &value, sizeof(int32_t));
+    data_len += sizeof(int32_t);
+    reply->data_len = htobe16(data_len);
+}
+
+void rpc_result_push_uint64(rpc_server_t *me, uint64_t value, rpc_msg_t *msg) {
+
+    rpc_reply_t *reply = &msg->reply;
+    uint16_t data_len = be16toh(reply->data_len);
+
+    printf("RESPUSH: uint64_t -> %"PRIu64"\n", value);
+    value = htobe64(value);
+    memcpy(&reply->data[data_len], &value, sizeof(uint64_t));
+    data_len += sizeof(uint64_t);
+    reply->data_len = htobe16(data_len);
+}
+
+void rpc_result_push_int64(rpc_server_t *me, int64_t value, rpc_msg_t *msg) {
+
+    rpc_reply_t *reply = &msg->reply;
+    uint16_t data_len = be16toh(reply->data_len);
+
+    printf("RESPUSH: int64_t -> %"PRIi64"\n", value);
+    value = htobe64(value);
+    memcpy(&reply->data[data_len], &value, sizeof(int64_t));
+    data_len += sizeof(int64_t);
     reply->data_len = htobe16(data_len);
 }
 
@@ -282,6 +335,7 @@ void rpc_result_push_float(rpc_server_t *me, float value, rpc_msg_t *msg) {
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
+    printf("RESPUSH: float -> %f\n", value);
     rpc_data_type_t v;
     v.flt = value;
     v.u32 = htobe32(v.u32);
@@ -295,6 +349,7 @@ void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg) {
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
 
+    printf("RESPUSH: double -> %0.15f\n", value);
     rpc_data_type_t v;
     v.dbl = value;
     v.u64 = htobe64(v.u64);

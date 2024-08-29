@@ -148,10 +148,14 @@ extern bool rpc_handle_connection(rpc_server_t *me, csp_conn_t *conn, rpc_server
 
 /* Server side call handler methods */
 extern int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...);
+extern void rpc_result_push_uint8(rpc_server_t *me, uint8_t value, rpc_msg_t *msg);
+extern void rpc_result_push_int8(rpc_server_t *me, int8_t value, rpc_msg_t *msg);
 extern void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, rpc_msg_t *msg);
 extern void rpc_result_push_int16(rpc_server_t *me, int16_t value, rpc_msg_t *msg);
 extern void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, rpc_msg_t *msg);
 extern void rpc_result_push_int32(rpc_server_t *me, int32_t value, rpc_msg_t *msg);
+extern void rpc_result_push_uint64(rpc_server_t *me, uint64_t value, rpc_msg_t *msg);
+extern void rpc_result_push_int64(rpc_server_t *me, int64_t value, rpc_msg_t *msg);
 extern void rpc_result_push_float(rpc_server_t *me, float value, rpc_msg_t *msg);
 extern void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg);
 
