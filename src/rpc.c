@@ -290,7 +290,7 @@ int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
     rpc_procedure_t *rpc = me->api->lookup(be32toh(msg->call.procedure));
     uint16_t data_len = be16toh(msg->call.data_len);
 
-    printf("deserializing_call: data_len=%"PRId16",procedure:%"PRIu32"\n", data_len, be32toh(msg->call.procedure);
+    printf("deserializing_call: data_len=%"PRId16",procedure:%"PRIu32"\n", data_len, be32toh(msg->call.procedure));
 
     uint8_t dummy[1024];
 
@@ -335,8 +335,10 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, void
         rpc_msg_t *msg = (rpc_msg_t *)reply->data;
         uint16_t data_len = be16toh(msg->reply.data_len);
 
+        printf("rpc_reply: data_len=%"PRId16"\n", data_len);
+
         if (rpc) {
-            rpc_unpack(&reply->data[0], data_len, rpc->res_fmt, ret, args);
+            rpc_unpack(&msg->reply.data[0], data_len, rpc->res_fmt, ret, args);
         }
 
         csp_buffer_free(reply);
