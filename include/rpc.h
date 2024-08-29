@@ -135,30 +135,19 @@ typedef struct rpc_server_s {
     const rpc_api_t *api;
 } rpc_server_t;
 
-typedef union rpc_data_type_u {
-    int8_t      i8;
-    uint8_t     u8;
-    int16_t     i16;
-    uint16_t    u16;
-    int32_t     i32;
-    uint32_t    u32;
-    int64_t     i64;
-    uint64_t    u64;
-    float       flt;
-    double      dbl;
-} rpc_data_type_t;
-
+/* Client side methods */
 extern int rpc_connect(rpc_client_t *me, uint16_t node);
 extern int rpc_disconnect(rpc_client_t *me);
 extern int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...);
 
+/* Main loop server side methods */
 extern int rpc_start_server(rpc_server_t *me);
 extern int rpc_stop_server(rpc_server_t *me);
 extern csp_conn_t * rpc_waitfor_connections(rpc_server_t *me);
 extern bool rpc_handle_connection(rpc_server_t *me, csp_conn_t *conn, rpc_server_callback_t *handler);
-extern int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...);
-extern csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg);
 
+/* Server side call handler methods */
+extern int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...);
 extern void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, rpc_msg_t *msg);
 extern void rpc_result_push_int16(rpc_server_t *me, int16_t value, rpc_msg_t *msg);
 extern void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, rpc_msg_t *msg);

@@ -6,6 +6,19 @@
 
 #include "rpc.h"
 
+typedef union rpc_data_type_u {
+    int8_t      i8;
+    uint8_t     u8;
+    int16_t     i16;
+    uint16_t    u16;
+    int32_t     i32;
+    uint32_t    u32;
+    int64_t     i64;
+    uint64_t    u64;
+    float       flt;
+    double      dbl;
+} rpc_data_type_t;
+
 static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_list args) {
 
     uint16_t length = 0;
@@ -375,7 +388,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     return 0;
 }
 
-csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg) {
+static csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg) {
 
     csp_packet_t *packet;
 
