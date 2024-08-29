@@ -150,7 +150,7 @@ typedef union rpc_data_type_u {
 
 extern int rpc_connect(rpc_client_t *me, uint16_t node);
 extern int rpc_disconnect(rpc_client_t *me);
-extern int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, void *ret, ...);
+extern int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...);
 
 extern int rpc_start_server(rpc_server_t *me);
 extern int rpc_stop_server(rpc_server_t *me);

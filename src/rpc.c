@@ -115,12 +115,11 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
     return length;
 }
 
-static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out, va_list args) {
+static uint16_t rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, va_list args) {
 
     uint16_t offset = 0;
 
     while (*fmt != '\0' && offset < len) {
-        rpc_data_type_t *res_val = (rpc_data_type_t *)((uintptr_t)out + offset);
         rpc_data_type_t *val;
         switch (*fmt) {
             case 'Q':
@@ -128,11 +127,7 @@ static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out,
                 val = (rpc_data_type_t *)va_arg(args, uint64_t *);
                 memcpy(val, &data[offset], sizeof(val->u64));
                 val->u64 = be64toh(val->u64);
-
-                memcpy(res_val, &data[offset], sizeof(res_val->u64));
-                res_val->u64 = be64toh(res_val->u64);
-
-                printf("UNPACK: uint64_t -> %"PRIu64",%"PRIu64"\n", res_val->u64, val->u64);
+                printf("UNPACK: uint64_t -> %"PRIu64"\n", val->u64);
                 offset += sizeof(val->u64);
             }
             break;
@@ -141,11 +136,7 @@ static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out,
                 val = (rpc_data_type_t *)va_arg(args, int64_t *);
                 memcpy(val, &data[offset], sizeof(val->i64));
                 val->i64 = be64toh(val->i64);
-
-                memcpy(res_val, &data[offset], sizeof(res_val->i64));
-                res_val->i64 = be64toh(res_val->i64);
-
-                printf("UNPACK: int64_t -> %"PRIi64",%"PRIi64"\n", res_val->i64, val->i64);
+                printf("UNPACK: int64_t -> %"PRIi64"\n", val->i64);
                 offset += sizeof(val->i64);
             }
             break;
@@ -154,11 +145,7 @@ static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out,
                 val = (rpc_data_type_t *)va_arg(args, uint32_t *);
                 memcpy(val, &data[offset], sizeof(val->u32));
                 val->u32 = be32toh(val->u32);
-
-                memcpy(res_val, &data[offset], sizeof(res_val->u32));
-                res_val->u32 = be32toh(res_val->u32);
-
-                printf("UNPACK: uint32_t -> %"PRIu32",%"PRIu32"\n", res_val->u32, val->u32);
+                printf("UNPACK: uint32_t -> %"PRIu32"\n", val->u32);
                 offset += sizeof(val->u32);
             }
             break;
@@ -167,11 +154,7 @@ static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out,
                 val = (rpc_data_type_t *)va_arg(args, int32_t *);
                 memcpy(val, &data[offset], sizeof(val->i32));
                 val->i32 = be32toh(val->i32);
-
-                memcpy(res_val, &data[offset], sizeof(res_val->i32));
-                res_val->i32 = be32toh(res_val->i32);
-
-                printf("UNPACK: int32_t -> %"PRIi32",%"PRIi32"\n", res_val->i32, val->i32);
+                printf("UNPACK: int32_t -> %"PRIi32"\n", val->i32);
                 offset += sizeof(val->i32);
             }
             break;
@@ -180,11 +163,7 @@ static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out,
                 val = (rpc_data_type_t *)va_arg(args, uint16_t *);
                 memcpy(val, &data[offset], sizeof(val->u16));
                 val->u16 = be16toh(val->u16);
-
-                memcpy(res_val, &data[offset], sizeof(res_val->u16));
-                res_val->u16 = be16toh(res_val->u16);
-
-                printf("UNPACK: uint16_t -> %"PRIu16",%"PRIu16"\n", res_val->u16, val->u16);
+                printf("UNPACK: uint16_t -> %"PRIu16"\n", val->u16);
                 offset += sizeof(val->u16);
             }
             break;
@@ -193,11 +172,7 @@ static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out,
                 val = (rpc_data_type_t *)va_arg(args, int16_t *);
                 memcpy(val, &data[offset], sizeof(val->i16));
                 val->i16 = be16toh(val->i16);
-
-                memcpy(res_val, &data[offset], sizeof(res_val->i16));
-                res_val->i16 = be16toh(res_val->i16);
-
-                printf("UNPACK: int16_t -> %"PRIi16",%"PRIi16"\n", res_val->i16, val->i16);
+                printf("UNPACK: int16_t -> %"PRIi16"\n", val->i16);
                 offset += sizeof(val->i16);
             }
             break;
@@ -206,11 +181,7 @@ static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out,
                 val = (rpc_data_type_t *)va_arg(args, uint8_t *);
                 memcpy(val, &data[offset], sizeof(val->u8));
                 val->u8 = val->u8;
-
-                memcpy(res_val, &data[offset], sizeof(res_val->u8));
-                res_val->u8 = res_val->u8;
-
-                printf("UNPACK: uint8_t -> %"PRIu8",%"PRIu8"\n", res_val->u8, val->u8);
+                printf("UNPACK: uint8_t -> %"PRIu8"\n", val->u8);
                 offset += sizeof(val->u8);
             }
             break;
@@ -219,11 +190,7 @@ static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out,
                 val = (rpc_data_type_t *)va_arg(args, int8_t *);
                 memcpy(val, &data[offset], sizeof(val->i8));
                 val->i8 = val->i8;
-
-                memcpy(res_val, &data[offset], sizeof(res_val->i8));
-                res_val->i8 = res_val->i8;
-
-                printf("UNPACK: int8_t -> %"PRIi8",%"PRIi8"\n", res_val->i8, val->i8);
+                printf("UNPACK: int8_t -> %"PRIi8"\n", val->i8);
                 offset += sizeof(val->i8);
             }
             break;
@@ -232,11 +199,7 @@ static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out,
                 val = (rpc_data_type_t *)va_arg(args, float *);
                 memcpy(val, &data[offset], sizeof(val->flt));
                 val->u32 = be32toh(val->u32);
-
-                memcpy(res_val, &data[offset], sizeof(res_val->flt));
-                res_val->u32 = be32toh(res_val->u32);
-
-                printf("UNPACK: float -> %f,%f\n", res_val->flt, val->flt);
+                printf("UNPACK: float -> %f\n", val->flt);
                 offset += sizeof(val->flt);
             }
             break;
@@ -245,11 +208,7 @@ static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out,
                 val = (rpc_data_type_t *)va_arg(args, double *);
                 memcpy(val, &data[offset], sizeof(val->dbl));
                 val->u64 = be64toh(val->u64);
-
-                memcpy(res_val, &data[offset], sizeof(res_val->dbl));
-                res_val->u64 = be64toh(res_val->u64);
-
-                printf("UNPACK: double -> %0.15f,%0.15f\n", res_val->dbl, val->dbl);
+                printf("UNPACK: double -> %0.15f\n", val->dbl);
                 offset += sizeof(val->dbl);
             }
             break;
@@ -258,114 +217,7 @@ static void *rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, void *out,
         fmt++;
     }
 
-    return out;
-}
-
-int rpc_connect(rpc_client_t *me, uint16_t node) {
-
-    /* Create an RDP connection with the particular RPC server node */
-    printf("RPC: Connecting the RPC service on %"PRIu16"\n", node);
-    me->conn = csp_connect(CSP_PRIO_HIGH, node, CSP_PORT_RPC_SERVER, 0, CSP_O_RDP);
-    if (me->conn == NULL) {
-        printf("RPC: Could not connect to RPC service\n");
-        return -1;
-    }
-
-    return 0;
-}
-
-int rpc_disconnect(rpc_client_t *me) {
-
-    if (me && me->conn) {
-        csp_close(me->conn);
-    }
-
-    return 0;
-}
-
-int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
-
-
-    /* Lookup the RPC procedure format */
-    rpc_procedure_t *rpc = me->api->lookup(be32toh(msg->call.procedure));
-    uint16_t data_len = be16toh(msg->call.data_len);
-
-    printf("deserializing_call: data_len=%"PRId16",procedure:%"PRIu32"\n", data_len, be32toh(msg->call.procedure));
-
-    uint8_t dummy[1024];
-
-    if (rpc) {
-        va_list(args);
-        va_start(args, msg);
-
-        rpc_unpack(&msg->call.data[0], data_len, rpc->arg_fmt, &dummy[0], args);
-
-        va_end(args);
-    }
-
-    return 0;
-}
-
-int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, void *ret, ...) {
-
-    /* Allocate the CSP packet for the RPC object */
-    csp_packet_t *request = csp_buffer_get(0);
-
-    /* Create the RPC call protocol message to send to the RPC server */
-    va_list args;
-    va_start(args, ret);
-
-    rpc_msg_t *req_msg = (rpc_msg_t *)request->data;
-    req_msg->type = RPC_MSG_CALL;
-    req_msg->version = RPC_VERSION;
-    req_msg->xid = htobe32(0x12341234); /* TODO: We need to have a sequence number at this place */
-    req_msg->call.data_len = 0;
-    req_msg->call.program = htobe32(program);
-    req_msg->call.procedure = htobe32(procedure);
-    request->length = sizeof(req_msg->type) + sizeof(req_msg->version) + sizeof(req_msg->xid);
-    request->length += rpc_pack_call_request(me, &req_msg->call, args);
-
-    /* Send the RPC call to the RPC server */
-    csp_send(me->conn, request);
-
-    /* Wait for the reply from the client */
-    csp_packet_t *reply = csp_read(me->conn, 100);
-    if (reply) {
-        rpc_procedure_t *rpc = me->api->lookup(procedure);
-        rpc_msg_t *msg = (rpc_msg_t *)reply->data;
-        uint16_t data_len = be16toh(msg->reply.data_len);
-
-        printf("rpc_reply: data_len=%"PRId16"\n", data_len);
-
-        if (rpc) {
-            rpc_unpack(&msg->reply.data[0], data_len, rpc->res_fmt, ret, args);
-        }
-
-        csp_buffer_free(reply);
-    } else {
-        printf("RPC: Timeout waiting for reply\n");
-    }
-
-    va_end(args);
-
-    return 0;
-}
-
-csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg) {
-
-    csp_packet_t *packet;
-
-    packet = csp_buffer_get(0);
-    if (packet) {
-        rpc_msg_t *reply_msg = (rpc_msg_t *)packet->data;
-        reply_msg->type = RPC_MSG_REPLY;
-        reply_msg->version = RPC_VERSION;
-        reply_msg->xid = msg->xid;
-        reply_msg->reply.data_len = 0;
-        packet->length = sizeof(reply_msg->type) + sizeof(reply_msg->version) + sizeof(reply_msg->xid) + sizeof(reply_msg->reply);
-    }
-
-    return packet;
+    return offset;
 }
 
 void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, rpc_msg_t *msg) {
@@ -436,6 +288,108 @@ void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg) {
     memcpy(&reply->data[data_len], &v.u64, sizeof(double));
     data_len += sizeof(double);
     reply->data_len = htobe16(data_len);
+}
+
+int rpc_connect(rpc_client_t *me, uint16_t node) {
+
+    /* Create an RDP connection with the particular RPC server node */
+    printf("RPC: Connecting the RPC service on %"PRIu16"\n", node);
+    me->conn = csp_connect(CSP_PRIO_HIGH, node, CSP_PORT_RPC_SERVER, 0, CSP_O_RDP);
+    if (me->conn == NULL) {
+        printf("RPC: Could not connect to RPC service\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+int rpc_disconnect(rpc_client_t *me) {
+
+    if (me && me->conn) {
+        csp_close(me->conn);
+    }
+
+    return 0;
+}
+
+int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
+
+    /* Lookup the RPC procedure format */
+    rpc_procedure_t *rpc = me->api->lookup(be32toh(msg->call.procedure));
+    uint16_t data_len = be16toh(msg->call.data_len);
+
+    if (rpc) {
+        va_list(args);
+        va_start(args, msg);
+
+        rpc_unpack(&msg->call.data[0], data_len, rpc->arg_fmt, args);
+
+        va_end(args);
+    }
+
+    return 0;
+}
+
+int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...) {
+
+    /* Allocate the CSP packet for the RPC object */
+    csp_packet_t *request = csp_buffer_get(0);
+
+    /* Create the RPC call protocol message to send to the RPC server */
+    va_list args;
+    va_start(args, procedure);
+
+    rpc_msg_t *req_msg = (rpc_msg_t *)request->data;
+    req_msg->type = RPC_MSG_CALL;
+    req_msg->version = RPC_VERSION;
+    req_msg->xid = htobe32(0x12341234); /* TODO: We need to have a sequence number at this place */
+    req_msg->call.data_len = 0;
+    req_msg->call.program = htobe32(program);
+    req_msg->call.procedure = htobe32(procedure);
+    request->length = sizeof(req_msg->type) + sizeof(req_msg->version) + sizeof(req_msg->xid);
+    request->length += rpc_pack_call_request(me, &req_msg->call, args);
+
+    /* Send the RPC call to the RPC server */
+    csp_send(me->conn, request);
+
+    /* Wait for the reply from the client */
+    csp_packet_t *reply = csp_read(me->conn, 100);
+    if (reply) {
+        rpc_procedure_t *rpc = me->api->lookup(procedure);
+        rpc_msg_t *msg = (rpc_msg_t *)reply->data;
+        uint16_t data_len = be16toh(msg->reply.data_len);
+
+        printf("rpc_reply: data_len=%"PRId16"\n", data_len);
+
+        if (rpc) {
+            rpc_unpack(&msg->reply.data[0], data_len, rpc->res_fmt, args);
+        }
+
+        csp_buffer_free(reply);
+    } else {
+        printf("RPC: Timeout waiting for reply\n");
+    }
+
+    va_end(args);
+
+    return 0;
+}
+
+csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg) {
+
+    csp_packet_t *packet;
+
+    packet = csp_buffer_get(0);
+    if (packet) {
+        rpc_msg_t *reply_msg = (rpc_msg_t *)packet->data;
+        reply_msg->type = RPC_MSG_REPLY;
+        reply_msg->version = RPC_VERSION;
+        reply_msg->xid = msg->xid;
+        reply_msg->reply.data_len = 0;
+        packet->length = sizeof(reply_msg->type) + sizeof(reply_msg->version) + sizeof(reply_msg->xid) + sizeof(reply_msg->reply);
+    }
+
+    return packet;
 }
 
 static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc_server_callback_t *handler) {
