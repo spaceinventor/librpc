@@ -2,8 +2,7 @@ lib_src = [
     'rpc.c',
 ]
 
-csp_dep = subproject('csp').get_variable('csp_dep').partial_dependency(links: false, includes: true)
-csp_dep_static = subproject('csp').get_variable('csp_dep')
+csp_dep = dependency('csp', fallback: ['csp', 'csp_dep'], required: true)
 
 lib_deps = [csp_dep]
 
