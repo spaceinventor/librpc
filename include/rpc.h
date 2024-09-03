@@ -110,8 +110,9 @@ typedef struct rpc_server_s rpc_server_t;
  * @param procedure The procedure to execute on the specified program
  * @param call Pointer to the rpc_msg_t packet containing the call request being processed
  * @param reply Pointer to a rpc_msg_t packet which will receive the procedure return objects
+ * @param ctx Call back context pointer, which will be passed along
  */
-typedef void rpc_server_callback_t(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply);
+typedef void rpc_server_callback_t(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply, void *ctx);
 
 /**
  * @brief RPC procedure lookup method prototype
@@ -144,7 +145,7 @@ extern int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedur
 extern int rpc_start_server(rpc_server_t *me);
 extern int rpc_stop_server(rpc_server_t *me);
 extern csp_conn_t * rpc_waitfor_connections(rpc_server_t *me);
-extern bool rpc_handle_connection(rpc_server_t *me, csp_conn_t *conn, rpc_server_callback_t *handler);
+extern bool rpc_handle_connection(rpc_server_t *me, csp_conn_t *conn, rpc_server_callback_t *handler, void *cb_ctx);
 
 /* Server side call handler methods */
 extern int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...);
