@@ -132,6 +132,7 @@ typedef struct client_s {
 } rpc_client_t;
 
 typedef struct rpc_server_s {
+    csp_conn_t *conn;
     csp_socket_t sock;
     const rpc_api_t *api;
 } rpc_server_t;
@@ -144,8 +145,8 @@ extern int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedur
 /* Main loop server side methods */
 extern int rpc_start_server(rpc_server_t *me);
 extern int rpc_stop_server(rpc_server_t *me);
-extern csp_conn_t * rpc_waitfor_connections(rpc_server_t *me);
-extern bool rpc_handle_connection(rpc_server_t *me, csp_conn_t *conn, rpc_server_callback_t *handler, void *cb_ctx);
+extern bool rpc_waitfor_connections(rpc_server_t *me);
+extern bool rpc_handle_connection(rpc_server_t *me, rpc_server_callback_t *handler, void *cb_ctx);
 
 /* Server side call handler methods */
 extern int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...);

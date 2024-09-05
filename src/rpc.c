@@ -527,27 +527,26 @@ int rpc_stop_server(rpc_server_t *me) {
     return 0;
 }
 
-csp_conn_t * rpc_waitfor_connections(rpc_server_t *me) {
+bool rpc_waitfor_connections(rpc_server_t *me) {
 
-    csp_conn_t *conn;
-    if ((conn = csp_accept(&me->sock, 10000)) == NULL)
+    if ((me->conn = csp_accept(&me->sock, 10000)) == NULL)
     {
         /* timeout */
-        return NULL;
+        return false;
     }
 
-    uint16_t src = csp_conn_src(conn);
-    uint16_t sport = csp_conn_sport(conn);
+    uint16_t src = csp_conn_src(me->conn);
+    uint16_t sport = csp_conn_sport(me->conn);
 
     printf("RPC: Incoming connection from: %"PRIu16":%"PRIu16"\n", src, sport);
 
-    return conn;
+    return true;
 }
 
-bool rpc_handle_connection(rpc_server_t *me, csp_conn_t *conn, rpc_server_callback_t *cb, void *cb_ctx) {
+bool rpc_handle_connection(rpc_server_t *me, rpc_server_callback_t *cb, void *cb_ctx) {
 
     /* Read request packets on connection, timeout is 10 s */
-    csp_packet_t *request = csp_read(conn, 10000);
+    csp_packet_t *request = csp_read(me->conn, 10000);
     if (NULL == request) {
         /* The connection is lost, tell the caller */
         printf("RPC: Client disconnected or timeout.\n");
@@ -558,7 +557,7 @@ bool rpc_handle_connection(rpc_server_t *me, csp_conn_t *conn, rpc_server_callba
     csp_packet_t *reply = NULL;
     reply = rpc_handle_msg(me, request, cb, cb_ctx);
     if (reply) {
-        csp_send(conn, reply);
+        csp_send(me->conn, reply);
     }
 
     /* We still have a valid connection */

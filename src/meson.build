@@ -2,7 +2,7 @@ lib_src = [
     'rpc.c',
 ]
 
-csp_dep = dependency('csp', fallback: ['csp', 'csp_dep'], required: true)
+csp_dep = dependency('csp', fallback: ['csp', 'csp_dep'], required: true).partial_dependency(links: false, includes: true)
 
 lib_deps = [csp_dep]
 
