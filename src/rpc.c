@@ -25,7 +25,7 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
     uint16_t data_len = 0;
 
     /* Lookup the RPC procedure format */
-    rpc_procedure_t *rpc = me->api->lookup(be32toh(call->procedure));
+    const rpc_procedure_t *rpc = me->api->lookup(be32toh(call->procedure));
 
     if (rpc) {
         /* Scan the format string and grab arguments from the args list */
@@ -383,7 +383,7 @@ int rpc_disconnect(rpc_client_t *me) {
 int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
 
     /* Lookup the RPC procedure format */
-    rpc_procedure_t *rpc = me->api->lookup(be32toh(msg->call.procedure));
+    const rpc_procedure_t *rpc = me->api->lookup(be32toh(msg->call.procedure));
     uint16_t data_len = be16toh(msg->call.data_len);
 
     if (rpc) {
@@ -423,7 +423,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     /* Wait for the reply from the client */
     csp_packet_t *reply = csp_read(me->conn, 100);
     if (reply) {
-        rpc_procedure_t *rpc = me->api->lookup(procedure);
+        const rpc_procedure_t *rpc = me->api->lookup(procedure);
         rpc_msg_t *msg = (rpc_msg_t *)reply->data;
         uint16_t data_len = be16toh(msg->reply.data_len);
 

@@ -120,7 +120,7 @@ typedef void rpc_server_callback_t(rpc_server_t *me, uint32_t program, uint32_t 
  * @param id 
  * @return rpc_procedure_t *
  */
-typedef rpc_procedure_t * rpc_lookup_procedure_t(uint32_t id);
+typedef const rpc_procedure_t * rpc_lookup_procedure_t(uint32_t id);
 
 typedef struct rpc_api_s {
     rpc_lookup_procedure_t *lookup;
