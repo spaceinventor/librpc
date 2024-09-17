@@ -19,7 +19,7 @@ typedef union rpc_data_type_u {
     double      dbl;
 } rpc_data_type_t;
 
-static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_list args) {
+static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_list *args) {
 
     uint16_t length = 0;
     uint16_t data_len = 0;
@@ -35,7 +35,7 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
                 case 'f':
                 {
                     rpc_data_type_t value;
-                    value.flt = (float)va_arg(args, double);
+                    value.flt = (float)va_arg(*args, double);
                     printf("PACK: float > %f\n", value.flt);
                     value.u32 = htobe32(value.u32);
                     memcpy(&(call->data[data_len]), &value, sizeof(float));
@@ -45,7 +45,7 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
                 case 'd':
                 {
                     rpc_data_type_t value;
-                    value.dbl = (double)va_arg(args, double);
+                    value.dbl = (double)va_arg(*args, double);
                     printf("PACK: double > %f\n", value.dbl);
                     value.u64 = htobe64(value.u64);
                     memcpy(&(call->data[data_len]), &value, sizeof(double));
@@ -54,21 +54,21 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
                 break;
                 case 'b':
                 {
-                    int8_t value = (int8_t)va_arg(args, int);
+                    int8_t value = (int8_t)va_arg(*args, int);
                     printf("PACK: int8_t -> %"PRIi8"\n", value);
                     memcpy(&(call->data[data_len]), &value, sizeof(int8_t));
                     data_len += sizeof(int8_t);
                 } break;
                 case 'B':
                 {
-                    uint8_t value = (uint8_t)va_arg(args, int);
+                    uint8_t value = (uint8_t)va_arg(*args, int);
                     printf("PACK: uint8_t -> %"PRIu8"\n", value);
                     memcpy(&(call->data[data_len]), &value, sizeof(uint8_t));
                     data_len += sizeof(uint8_t);
                 } break;
                 case 'h':
                 {
-                    int16_t value = (int16_t)va_arg(args, int);
+                    int16_t value = (int16_t)va_arg(*args, int);
                     printf("PACK: int16_t -> %"PRIi16"\n", value);
                     value = htobe16(value);
                     memcpy(&(call->data[data_len]), &value, sizeof(int16_t));
@@ -76,7 +76,7 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
                 } break;
                 case 'H':
                 {
-                    uint16_t value = (uint16_t)va_arg(args, int);
+                    uint16_t value = (uint16_t)va_arg(*args, int);
                     printf("PACK: uint16_t -> %"PRIu16"\n", value);
                     value = htobe16(value);
                     memcpy(&(call->data[data_len]), &value, sizeof(uint16_t));
@@ -84,7 +84,7 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
                 } break;
                 case 'l':
                 {
-                    int32_t value = (int32_t)va_arg(args, int32_t);
+                    int32_t value = (int32_t)va_arg(*args, int32_t);
                     printf("PACK: int32_t -> %"PRIi32"\n", value);
                     value = htobe32(value);
                     memcpy(&(call->data[data_len]), &value, sizeof(int32_t));
@@ -92,7 +92,7 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
                 } break;
                 case 'L':
                 {
-                    uint32_t value = (uint32_t)va_arg(args, uint32_t);
+                    uint32_t value = (uint32_t)va_arg(*args, uint32_t);
                     printf("PACK: uint32_t -> %"PRIu32"\n", value);
                     value = htobe32(value);
                     memcpy(&(call->data[data_len]), &value, sizeof(uint32_t));
@@ -100,7 +100,7 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
                 } break;
                 case 'q':
                 {
-                    int64_t value = (int64_t)va_arg(args, int64_t);
+                    int64_t value = (int64_t)va_arg(*args, int64_t);
                     printf("PACK: int64_t -> %"PRIi64"\n", value);
                     value = htobe64(value);
                     memcpy(&(call->data[data_len]), &value, sizeof(int64_t));
@@ -108,7 +108,7 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
                 } break;
                 case 'Q':
                 {
-                    uint64_t value = (uint64_t)va_arg(args, uint64_t);
+                    uint64_t value = (uint64_t)va_arg(*args, uint64_t);
                     printf("PACK: uint64_t -> %"PRIu64"\n", value);
                     value = htobe64(value);
                     memcpy(&(call->data[data_len]), &value, sizeof(uint64_t));
@@ -415,7 +415,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     req_msg->call.program = htobe32(program);
     req_msg->call.procedure = htobe32(procedure);
     request->length = sizeof(req_msg->type) + sizeof(req_msg->version) + sizeof(req_msg->xid);
-    request->length += rpc_pack_call_request(me, &req_msg->call, args);
+    request->length += rpc_pack_call_request(me, &req_msg->call, &args);
 
     /* Send the RPC call to the RPC server */
     csp_send(me->conn, request);
@@ -427,7 +427,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
         rpc_msg_t *msg = (rpc_msg_t *)reply->data;
         uint16_t data_len = be16toh(msg->reply.data_len);
 
-        printf("rpc_reply: data_len=%"PRId16"\n", data_len);
+        printf("rpc_reply: data_len=%"PRId16", data=%p\n", data_len, &msg->reply.data[0]);
 
         if (rpc) {
             rpc_unpack(&msg->reply.data[0], data_len, rpc->res_fmt, args);
