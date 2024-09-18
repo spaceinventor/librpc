@@ -1,4 +1,4 @@
-project('rpc', 'c', subproject_dir: 'extern', version: '0.0.1', default_options: [
+project('rpc', 'c', version: '0.0.1', default_options: [
     'default_library=static',
     'b_lto=false',
     'b_lundef=false',
