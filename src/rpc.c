@@ -19,7 +19,7 @@ typedef union rpc_data_type_u {
     double      dbl;
 } rpc_data_type_t;
 
-static const rpc_program_t *lookup_program_from_id(rpc_module_t *module, uint32_t id) {
+static const rpc_program_t * lookup_program_from_id(rpc_module_t *module, uint32_t id) {
 
     for (uint32_t n = 0; n < module->nof_programs; n++) {
         if (module->programs[n].program_id == id) {
@@ -28,6 +28,22 @@ static const rpc_program_t *lookup_program_from_id(rpc_module_t *module, uint32_
     }
 
     return NULL;
+}
+
+static const rpc_procedure_t * lookup_procedure_from_id(const rpc_program_t *program, uint32_t id) {
+
+    const rpc_procedure_t *procedure = NULL;
+    const rpc_procedure_t *iter = program->procedures;
+
+    while (iter && iter->id != 0xFFFFFFFF) {
+        if (iter->id == id) {
+            procedure = iter;
+            break;
+        }
+        iter++;
+    }
+
+    return procedure;
 }
 
 static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call, va_list *args) {
@@ -398,8 +414,8 @@ int rpc_disconnect(rpc_client_t *me) {
 int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
 
     /* Lookup the RPC program and there after the procedure format */
-    const rpc_program_t *prg = lookup_program_from_id(&me->module, be32toh(msg->call.program));
-    const rpc_procedure_t *rpc = prg->api->lookup(be32toh(msg->call.procedure));
+    const rpc_program_t *program = lookup_program_from_id(&me->module, be32toh(msg->call.program));
+    const rpc_procedure_t *rpc = lookup_procedure_from_id(program, be32toh(msg->call.procedure));
     uint16_t data_len = be16toh(msg->call.data_len);
 
     if (rpc) {
@@ -447,7 +463,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     /* Wait for the reply from the client */
     csp_packet_t *reply = csp_read(me->conn, 100);
     if (reply) {
-        const rpc_procedure_t *rpc = prg->api->lookup(procedure);
+        const rpc_procedure_t *rpc = lookup_procedure_from_id(prg, procedure);
         rpc_msg_t *msg = (rpc_msg_t *)reply->data;
         uint16_t data_len = be16toh(msg->reply.data_len);
 
@@ -647,28 +663,8 @@ static void rpc_prg_handler(rpc_server_t *me, uint32_t program, uint32_t procedu
 }
 
 static const rpc_procedure_t g_rpc_prg_procedures[] = {
-    { .id = RPC_PROCEDURE_INFO, .name = "rpc_info", .arg_fmt = "L", .arg_fmt = "L" },
+    { .id = RPC_PROCEDURE_INFO, .name = "rpc_info", .arg_fmt = "L", .res_fmt = "L" },
+    RPC_PROCEDURE_NULL_INIT
 };
 
-const rpc_procedure_t * rpc_prg_procedure_lookup(uint32_t id);
-
-static const rpc_api_t g_rpc_prg_api = {
-    .lookup = rpc_prg_procedure_lookup,
-};
-
-const rpc_procedure_t * rpc_prg_procedure_lookup(uint32_t id) {
-
-    uint32_t i;
-    const rpc_procedure_t *rpc_proc = NULL;
-
-    for (i=0; i<sizeof(g_rpc_prg_procedures)/sizeof(rpc_procedure_t); i++) {
-        if (g_rpc_prg_procedures[i].id == id) {
-            rpc_proc = &g_rpc_prg_procedures[i];
-            break;
-        }
-    }
-
-    return rpc_proc;
-}
-
-RPC_DECLARE_PROGRAM( rpc_server, RPC_PROGRAM_RPC, rpc_prg_handler, &g_rpc_prg_api, NULL, NULL );
+RPC_DECLARE_PROGRAM( rpc_server, RPC_PROGRAM_RPC, rpc_prg_handler, NULL, &g_rpc_prg_procedures[0], NULL );

@@ -65,6 +65,8 @@ typedef struct rpc_procedure_s {
     const char *res_fmt;
 } rpc_procedure_t;
 
+#define RPC_PROCEDURE_NULL_INIT {.id = 0xFFFFFFFFUL, .name = NULL, .arg_fmt = NULL, .res_fmt = NULL }
+
 /**
  * @brief RPC call message type
  * 
@@ -157,7 +159,7 @@ typedef struct rpc_program_s {
 
 #define RPC_STRINGIFY(_x) #_x
 #define RPC_DECLARE_PROGRAM(_nAME, _pROGRAMiD, _hANDLER, _aPI, _pROCEDURES, _dATA) \
-    __attribute__((used,section("rpc_programs"))) \
+    __attribute__((used,aligned(8),section("rpc_programs"))) \
     static const rpc_program_t __rpc_program_##_nAME##_instance = { \
         .name = RPC_STRINGIFY(_nAME), \
         .program_id = (_pROGRAMiD), \
