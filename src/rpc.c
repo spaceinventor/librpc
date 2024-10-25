@@ -627,8 +627,6 @@ bool rpc_handle_connection(rpc_server_t *me) {
 
 static void rpc_prg_handler(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply, void *data) {
 
-    rpc_server_t **rpc = (rpc_server_t **)data;
-
     switch (procedure) {
         case RPC_PROCEDURE_INFO:
         {
