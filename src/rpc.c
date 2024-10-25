@@ -426,6 +426,11 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     /* Find the associated program object */
     const rpc_program_t *prg = lookup_program_from_id(&me->module, program);
 
+    if (!prg) {
+        printf("ERROR: RPC client could not find program: 0x%08"PRIX32"\n", program);
+        return -1;
+    }
+
     rpc_msg_t *req_msg = (rpc_msg_t *)request->data;
     req_msg->type = RPC_MSG_CALL;
     req_msg->version = RPC_VERSION;
