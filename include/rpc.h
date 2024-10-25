@@ -26,6 +26,26 @@ extern "C" {
  * The message type could either be a Call or a Reply.
  * 
  */
+
+/**
+ * @brief The RPC program id for the RPC server
+ * 
+ * This program id is used exclusively by the RPC
+ * server for its "program". The RPC server program
+ * implements the supporting procedures for "talking"
+ * to the RPC server on a particular client node.
+ * 
+ */
+#define RPC_PROGRAM_RPC 0xFFFFFFFF
+
+/**
+ * @brief RPC program procedure ID list
+ * 
+ */
+typedef enum rpc_program_procedures_e {
+    RPC_PROCEDURE_INFO = 0,
+} rpc_program_procedures_t;
+
 typedef enum rpc_msg_type_e {
     RPC_MSG_CALL = 0,
     RPC_MSG_REPLY = 1,

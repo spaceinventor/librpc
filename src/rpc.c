@@ -624,3 +624,53 @@ bool rpc_handle_connection(rpc_server_t *me) {
     /* We still have a valid connection */
     return true;
 }
+
+static void rpc_prg_handler(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply, void *data) {
+
+    rpc_server_t **rpc = (rpc_server_t **)data;
+
+    switch (procedure) {
+        case RPC_PROCEDURE_INFO:
+        {
+            uint32_t id;
+
+            /* De-serialize the arguments */
+            rpc_call_deserialize(me, call, &id);
+
+            printf("RPC Prg: info()(%"PRIu32")\n", id);
+
+            rpc_result_push_int32(me, (uint32_t)0x1234, reply);
+        }
+        break;
+        default:
+            printf("RPC Prg: Unhandled RPC procedure call: 0x%"PRIX32"\n", procedure);
+            break;
+    }
+}
+
+static const rpc_procedure_t g_rpc_prg_procedures[] = {
+    { .id = RPC_PROCEDURE_INFO, .name = "rpc_info", .arg_fmt = "L", .arg_fmt = "L" },
+};
+
+const rpc_procedure_t * rpc_prg_procedure_lookup(uint32_t id);
+
+static const rpc_api_t g_rpc_prg_api = {
+    .lookup = rpc_prg_procedure_lookup,
+};
+
+const rpc_procedure_t * rpc_prg_procedure_lookup(uint32_t id) {
+
+    uint32_t i;
+    const rpc_procedure_t *rpc_proc = NULL;
+
+    for (i=0; i<sizeof(g_rpc_prg_procedures)/sizeof(rpc_procedure_t); i++) {
+        if (g_rpc_prg_procedures[i].id == id) {
+            rpc_proc = &g_rpc_prg_procedures[i];
+            break;
+        }
+    }
+
+    return rpc_proc;
+}
+
+RPC_DECLARE_PROGRAM( rpc_server, RPC_PROGRAM_RPC, rpc_prg_handler, &g_rpc_prg_api, NULL, NULL );
