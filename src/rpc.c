@@ -52,7 +52,7 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
     uint16_t data_len = 0;
 
     /* Lookup the RPC procedure format */
-    const rpc_procedure_t *rpc = prg->api->lookup(be32toh(call->procedure));
+    const rpc_procedure_t *rpc = lookup_procedure_from_id(prg, be32toh(call->procedure));
 
     if (rpc) {
         /* Scan the format string and grab arguments from the args list */
