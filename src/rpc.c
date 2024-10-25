@@ -19,13 +19,24 @@ typedef union rpc_data_type_u {
     double      dbl;
 } rpc_data_type_t;
 
-static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_list *args) {
+static const rpc_program_t *lookup_program_from_id(rpc_module_t *module, uint32_t id) {
+
+    for (uint32_t n = 0; n < module->nof_programs; n++) {
+        if (module->programs[n].program_id == id) {
+            return &module->programs[n];
+        }
+    }
+
+    return NULL;
+}
+
+static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call, va_list *args) {
 
     uint16_t length = 0;
     uint16_t data_len = 0;
 
     /* Lookup the RPC procedure format */
-    const rpc_procedure_t *rpc = me->api->lookup(be32toh(call->procedure));
+    const rpc_procedure_t *rpc = prg->api->lookup(be32toh(call->procedure));
 
     if (rpc) {
         /* Scan the format string and grab arguments from the args list */
@@ -386,8 +397,9 @@ int rpc_disconnect(rpc_client_t *me) {
 
 int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
 
-    /* Lookup the RPC procedure format */
-    const rpc_procedure_t *rpc = me->api->lookup(be32toh(msg->call.procedure));
+    /* Lookup the RPC program and there after the procedure format */
+    const rpc_program_t *prg = lookup_program_from_id(&me->module, be32toh(msg->call.program));
+    const rpc_procedure_t *rpc = prg->api->lookup(be32toh(msg->call.procedure));
     uint16_t data_len = be16toh(msg->call.data_len);
 
     if (rpc) {
@@ -411,6 +423,9 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     va_list args;
     va_start(args, procedure);
 
+    /* Find the associated program object */
+    const rpc_program_t *prg = lookup_program_from_id(&me->module, program);
+
     rpc_msg_t *req_msg = (rpc_msg_t *)request->data;
     req_msg->type = RPC_MSG_CALL;
     req_msg->version = RPC_VERSION;
@@ -419,7 +434,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     req_msg->call.program = htobe32(program);
     req_msg->call.procedure = htobe32(procedure);
     request->length = sizeof(req_msg->type) + sizeof(req_msg->version) + sizeof(req_msg->xid);
-    request->length += rpc_pack_call_request(me, &req_msg->call, &args);
+    request->length += rpc_pack_call_request(prg, &req_msg->call, &args);
 
     /* Send the RPC call to the RPC server */
     csp_send(me->conn, request);
@@ -427,7 +442,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     /* Wait for the reply from the client */
     csp_packet_t *reply = csp_read(me->conn, 100);
     if (reply) {
-        const rpc_procedure_t *rpc = me->api->lookup(procedure);
+        const rpc_procedure_t *rpc = prg->api->lookup(procedure);
         rpc_msg_t *msg = (rpc_msg_t *)reply->data;
         uint16_t data_len = be16toh(msg->reply.data_len);
 
@@ -485,30 +500,17 @@ static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet) {
 
             reply = rpc_result_prepare(me, req_msg);
 
-            const rpc_program_t *prg = NULL;
-
             /* Find a possibly matching program handler */
-            extern const rpc_program_t __start_rpc_programs;
-            extern const rpc_program_t __stop_rpc_programs;
-            const rpc_program_t *iter = &__start_rpc_programs;
-            printf("start: %p, end: %p\n", &__start_rpc_programs, &__stop_rpc_programs);
-            while (iter != &__stop_rpc_programs) {
-                if (iter->program_id == program) {
-                    /* We found a match */
-                    printf("RPC: '%s'\n", iter->name);
-                    prg = iter;
-                    break;
-                }
-                iter++;
-            }
-
+            const rpc_program_t *prg = lookup_program_from_id(&me->module, program);
             if (prg) {
+                /* We found a match, call the associated handler */
                 rpc_msg_t *reply_msg = (rpc_msg_t *)reply->data;
                 (*prg->handler)(me, program, procedure, req_msg, reply_msg, prg->data);
                 reply->length += be16toh(reply_msg->reply.data_len);
                 printf("rpc_msg_reply: data_len=%"PRId16"\n", be16toh(reply_msg->reply.data_len));
+                /* Do not try to find any other matches */
+                break;
             }
-
         }
         break;
     }
@@ -517,7 +519,40 @@ static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet) {
 
 }
 
+int rpc_init_client(rpc_client_t *me) {
+
+    /* Initializing the client, also means parsing the programs registered */
+    extern const rpc_program_t __start_rpc_programs;
+    extern const rpc_program_t __stop_rpc_programs;
+    const rpc_program_t *iter = &__start_rpc_programs;
+    me->module.nof_programs = 0;
+    me->module.programs = &__start_rpc_programs;
+    printf("RPC Client: Registering programs from address: %p\n", me->module.programs);
+    while (iter != &__stop_rpc_programs) {
+        printf("  0x%08"PRIX32", '%s'\n", iter->program_id, iter->name);
+        me->module.nof_programs++;
+        iter++;
+    }
+    printf("RPC Client: Registered %"PRId32" programs\n", me->module.nof_programs);
+
+    return 0;
+}
+
 int rpc_start_server(rpc_server_t *me) {
+
+    /* Starting the server, also means parsing the programs registered */
+    extern const rpc_program_t __start_rpc_programs;
+    extern const rpc_program_t __stop_rpc_programs;
+    const rpc_program_t *iter = &__start_rpc_programs;
+    me->module.nof_programs = 0;
+    me->module.programs = &__start_rpc_programs;
+    printf("RPC Server: Registering programs from address: %p\n", me->module.programs);
+    while (iter != &__stop_rpc_programs) {
+        printf("  0x%08"PRIX32", '%s'\n", iter->program_id, iter->name);
+        me->module.nof_programs++;
+        iter++;
+    }
+    printf("RPC Server: Registered %"PRId32" programs\n", me->module.nof_programs);
 
     int res;
     me->sock.opts = CSP_O_RDP /*CSP_O_NONE*/;

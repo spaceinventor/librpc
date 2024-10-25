@@ -126,17 +126,6 @@ typedef struct rpc_api_s {
     rpc_lookup_procedure_t *lookup;
 } rpc_api_t;
 
-typedef struct client_s {
-    csp_conn_t *conn;
-    const rpc_api_t *api;
-} rpc_client_t;
-
-typedef struct rpc_server_s {
-    csp_conn_t *conn;
-    csp_socket_t sock;
-    const rpc_api_t *api;
-} rpc_server_t;
-
 typedef struct rpc_program_s {
     const uint32_t program_id;
     const char *name;
@@ -158,7 +147,24 @@ typedef struct rpc_program_s {
         .data = _dATA, \
     };
 
+typedef struct rpc_module_s {
+    uint32_t nof_programs;
+    const rpc_program_t *programs;
+} rpc_module_t;
+
+typedef struct client_s {
+    csp_conn_t *conn;
+    rpc_module_t module;
+} rpc_client_t;
+
+typedef struct rpc_server_s {
+    csp_conn_t *conn;
+    csp_socket_t sock;
+    rpc_module_t module;
+} rpc_server_t;
+
 /* Client side methods */
+extern int rpc_init_client(rpc_client_t *me);
 extern int rpc_connect(rpc_client_t *me, uint16_t node);
 extern int rpc_disconnect(rpc_client_t *me);
 extern int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...);
