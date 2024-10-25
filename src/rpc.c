@@ -30,93 +30,95 @@ static uint16_t rpc_pack_call_request(rpc_client_t *me, rpc_call_t *call, va_lis
     if (rpc) {
         /* Scan the format string and grab arguments from the args list */
         const char *pfmt = rpc->arg_fmt;
-        while (*pfmt != '\0') {
-            switch (*pfmt) {
-                case 'f':
-                {
-                    rpc_data_type_t value;
-                    value.flt = (float)va_arg(*args, double);
-                    printf("PACK: float > %f\n", value.flt);
-                    value.u32 = htobe32(value.u32);
-                    memcpy(&(call->data[data_len]), &value, sizeof(float));
-                    data_len += sizeof(float);
+        if (pfmt) {
+            while (*pfmt != '\0') {
+                switch (*pfmt) {
+                    case 'f':
+                    {
+                        rpc_data_type_t value;
+                        value.flt = (float)va_arg(*args, double);
+                        printf("PACK: float > %f\n", value.flt);
+                        value.u32 = htobe32(value.u32);
+                        memcpy(&(call->data[data_len]), &value, sizeof(float));
+                        data_len += sizeof(float);
+                    }
+                    break;
+                    case 'd':
+                    {
+                        rpc_data_type_t value;
+                        value.dbl = (double)va_arg(*args, double);
+                        printf("PACK: double > %f\n", value.dbl);
+                        value.u64 = htobe64(value.u64);
+                        memcpy(&(call->data[data_len]), &value, sizeof(double));
+                        data_len += sizeof(double);
+                    }
+                    break;
+                    case 'b':
+                    {
+                        int8_t value = (int8_t)va_arg(*args, int);
+                        printf("PACK: int8_t -> %"PRIi8"\n", value);
+                        memcpy(&(call->data[data_len]), &value, sizeof(int8_t));
+                        data_len += sizeof(int8_t);
+                    } break;
+                    case 'B':
+                    {
+                        uint8_t value = (uint8_t)va_arg(*args, int);
+                        printf("PACK: uint8_t -> %"PRIu8"\n", value);
+                        memcpy(&(call->data[data_len]), &value, sizeof(uint8_t));
+                        data_len += sizeof(uint8_t);
+                    } break;
+                    case 'h':
+                    {
+                        int16_t value = (int16_t)va_arg(*args, int);
+                        printf("PACK: int16_t -> %"PRIi16"\n", value);
+                        value = htobe16(value);
+                        memcpy(&(call->data[data_len]), &value, sizeof(int16_t));
+                        data_len += sizeof(int16_t);
+                    } break;
+                    case 'H':
+                    {
+                        uint16_t value = (uint16_t)va_arg(*args, int);
+                        printf("PACK: uint16_t -> %"PRIu16"\n", value);
+                        value = htobe16(value);
+                        memcpy(&(call->data[data_len]), &value, sizeof(uint16_t));
+                        data_len += sizeof(uint16_t);
+                    } break;
+                    case 'l':
+                    {
+                        int32_t value = (int32_t)va_arg(*args, int32_t);
+                        printf("PACK: int32_t -> %"PRIi32"\n", value);
+                        value = htobe32(value);
+                        memcpy(&(call->data[data_len]), &value, sizeof(int32_t));
+                        data_len += sizeof(int32_t);
+                    } break;
+                    case 'L':
+                    {
+                        uint32_t value = (uint32_t)va_arg(*args, uint32_t);
+                        printf("PACK: uint32_t -> %"PRIu32"\n", value);
+                        value = htobe32(value);
+                        memcpy(&(call->data[data_len]), &value, sizeof(uint32_t));
+                        data_len += sizeof(uint32_t);
+                    } break;
+                    case 'q':
+                    {
+                        int64_t value = (int64_t)va_arg(*args, int64_t);
+                        printf("PACK: int64_t -> %"PRIi64"\n", value);
+                        value = htobe64(value);
+                        memcpy(&(call->data[data_len]), &value, sizeof(int64_t));
+                        data_len += sizeof(int64_t);
+                    } break;
+                    case 'Q':
+                    {
+                        uint64_t value = (uint64_t)va_arg(*args, uint64_t);
+                        printf("PACK: uint64_t -> %"PRIu64"\n", value);
+                        value = htobe64(value);
+                        memcpy(&(call->data[data_len]), &value, sizeof(uint64_t));
+                        data_len += sizeof(uint64_t);
+                    } break;
                 }
-                break;
-                case 'd':
-                {
-                    rpc_data_type_t value;
-                    value.dbl = (double)va_arg(*args, double);
-                    printf("PACK: double > %f\n", value.dbl);
-                    value.u64 = htobe64(value.u64);
-                    memcpy(&(call->data[data_len]), &value, sizeof(double));
-                    data_len += sizeof(double);
-                }
-                break;
-                case 'b':
-                {
-                    int8_t value = (int8_t)va_arg(*args, int);
-                    printf("PACK: int8_t -> %"PRIi8"\n", value);
-                    memcpy(&(call->data[data_len]), &value, sizeof(int8_t));
-                    data_len += sizeof(int8_t);
-                } break;
-                case 'B':
-                {
-                    uint8_t value = (uint8_t)va_arg(*args, int);
-                    printf("PACK: uint8_t -> %"PRIu8"\n", value);
-                    memcpy(&(call->data[data_len]), &value, sizeof(uint8_t));
-                    data_len += sizeof(uint8_t);
-                } break;
-                case 'h':
-                {
-                    int16_t value = (int16_t)va_arg(*args, int);
-                    printf("PACK: int16_t -> %"PRIi16"\n", value);
-                    value = htobe16(value);
-                    memcpy(&(call->data[data_len]), &value, sizeof(int16_t));
-                    data_len += sizeof(int16_t);
-                } break;
-                case 'H':
-                {
-                    uint16_t value = (uint16_t)va_arg(*args, int);
-                    printf("PACK: uint16_t -> %"PRIu16"\n", value);
-                    value = htobe16(value);
-                    memcpy(&(call->data[data_len]), &value, sizeof(uint16_t));
-                    data_len += sizeof(uint16_t);
-                } break;
-                case 'l':
-                {
-                    int32_t value = (int32_t)va_arg(*args, int32_t);
-                    printf("PACK: int32_t -> %"PRIi32"\n", value);
-                    value = htobe32(value);
-                    memcpy(&(call->data[data_len]), &value, sizeof(int32_t));
-                    data_len += sizeof(int32_t);
-                } break;
-                case 'L':
-                {
-                    uint32_t value = (uint32_t)va_arg(*args, uint32_t);
-                    printf("PACK: uint32_t -> %"PRIu32"\n", value);
-                    value = htobe32(value);
-                    memcpy(&(call->data[data_len]), &value, sizeof(uint32_t));
-                    data_len += sizeof(uint32_t);
-                } break;
-                case 'q':
-                {
-                    int64_t value = (int64_t)va_arg(*args, int64_t);
-                    printf("PACK: int64_t -> %"PRIi64"\n", value);
-                    value = htobe64(value);
-                    memcpy(&(call->data[data_len]), &value, sizeof(int64_t));
-                    data_len += sizeof(int64_t);
-                } break;
-                case 'Q':
-                {
-                    uint64_t value = (uint64_t)va_arg(*args, uint64_t);
-                    printf("PACK: uint64_t -> %"PRIu64"\n", value);
-                    value = htobe64(value);
-                    memcpy(&(call->data[data_len]), &value, sizeof(uint64_t));
-                    data_len += sizeof(uint64_t);
-                } break;
-            }
 
-            pfmt++;
+                pfmt++;
+            }
         }
     
         length = sizeof(*call) + data_len;
@@ -132,102 +134,104 @@ static uint16_t rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, va_list
 
     uint16_t offset = 0;
 
-    while (*fmt != '\0' && offset < len) {
-        rpc_data_type_t *val;
-        switch (*fmt) {
-            case 'Q':
-            {
-                val = (rpc_data_type_t *)va_arg(args, uint64_t *);
-                memcpy(val, &data[offset], sizeof(val->u64));
-                val->u64 = be64toh(val->u64);
-                printf("UNPACK: uint64_t -> %"PRIu64"\n", val->u64);
-                offset += sizeof(val->u64);
+    if (fmt) {
+        while (*fmt != '\0' && offset < len) {
+            rpc_data_type_t *val;
+            switch (*fmt) {
+                case 'Q':
+                {
+                    val = (rpc_data_type_t *)va_arg(args, uint64_t *);
+                    memcpy(val, &data[offset], sizeof(val->u64));
+                    val->u64 = be64toh(val->u64);
+                    printf("UNPACK: uint64_t -> %"PRIu64"\n", val->u64);
+                    offset += sizeof(val->u64);
+                }
+                break;
+                case 'q':
+                {
+                    val = (rpc_data_type_t *)va_arg(args, int64_t *);
+                    memcpy(val, &data[offset], sizeof(val->i64));
+                    val->i64 = be64toh(val->i64);
+                    printf("UNPACK: int64_t -> %"PRIi64"\n", val->i64);
+                    offset += sizeof(val->i64);
+                }
+                break;
+                case 'L':
+                {
+                    val = (rpc_data_type_t *)va_arg(args, uint32_t *);
+                    memcpy(val, &data[offset], sizeof(val->u32));
+                    val->u32 = be32toh(val->u32);
+                    printf("UNPACK: uint32_t -> %"PRIu32"\n", val->u32);
+                    offset += sizeof(val->u32);
+                }
+                break;
+                case 'l':
+                {
+                    val = (rpc_data_type_t *)va_arg(args, int32_t *);
+                    memcpy(val, &data[offset], sizeof(val->i32));
+                    val->i32 = be32toh(val->i32);
+                    printf("UNPACK: int32_t -> %"PRIi32"\n", val->i32);
+                    offset += sizeof(val->i32);
+                }
+                break;
+                case 'H':
+                {
+                    val = (rpc_data_type_t *)va_arg(args, uint16_t *);
+                    memcpy(val, &data[offset], sizeof(val->u16));
+                    val->u16 = be16toh(val->u16);
+                    printf("UNPACK: uint16_t -> %"PRIu16"\n", val->u16);
+                    offset += sizeof(val->u16);
+                }
+                break;
+                case 'h':
+                {
+                    val = (rpc_data_type_t *)va_arg(args, int16_t *);
+                    memcpy(val, &data[offset], sizeof(val->i16));
+                    val->i16 = be16toh(val->i16);
+                    printf("UNPACK: int16_t -> %"PRIi16"\n", val->i16);
+                    offset += sizeof(val->i16);
+                }
+                break;
+                case 'B':
+                {
+                    val = (rpc_data_type_t *)va_arg(args, uint8_t *);
+                    memcpy(val, &data[offset], sizeof(val->u8));
+                    val->u8 = val->u8;
+                    printf("UNPACK: uint8_t -> %"PRIu8"\n", val->u8);
+                    offset += sizeof(val->u8);
+                }
+                break;
+                case 'b':
+                {
+                    val = (rpc_data_type_t *)va_arg(args, int8_t *);
+                    memcpy(val, &data[offset], sizeof(val->i8));
+                    val->i8 = val->i8;
+                    printf("UNPACK: int8_t -> %"PRIi8"\n", val->i8);
+                    offset += sizeof(val->i8);
+                }
+                break;
+                case 'f':
+                {
+                    val = (rpc_data_type_t *)va_arg(args, float *);
+                    memcpy(val, &data[offset], sizeof(val->flt));
+                    val->u32 = be32toh(val->u32);
+                    printf("UNPACK: float -> %f\n", val->flt);
+                    offset += sizeof(val->flt);
+                }
+                break;
+                case 'd':
+                {
+                    val = (rpc_data_type_t *)va_arg(args, double *);
+                    memcpy(val, &data[offset], sizeof(val->dbl));
+                    val->u64 = be64toh(val->u64);
+                    printf("UNPACK: double -> %0.15f\n", val->dbl);
+                    offset += sizeof(val->dbl);
+                }
+                break;
             }
-            break;
-            case 'q':
-            {
-                val = (rpc_data_type_t *)va_arg(args, int64_t *);
-                memcpy(val, &data[offset], sizeof(val->i64));
-                val->i64 = be64toh(val->i64);
-                printf("UNPACK: int64_t -> %"PRIi64"\n", val->i64);
-                offset += sizeof(val->i64);
-            }
-            break;
-            case 'L':
-            {
-                val = (rpc_data_type_t *)va_arg(args, uint32_t *);
-                memcpy(val, &data[offset], sizeof(val->u32));
-                val->u32 = be32toh(val->u32);
-                printf("UNPACK: uint32_t -> %"PRIu32"\n", val->u32);
-                offset += sizeof(val->u32);
-            }
-            break;
-            case 'l':
-            {
-                val = (rpc_data_type_t *)va_arg(args, int32_t *);
-                memcpy(val, &data[offset], sizeof(val->i32));
-                val->i32 = be32toh(val->i32);
-                printf("UNPACK: int32_t -> %"PRIi32"\n", val->i32);
-                offset += sizeof(val->i32);
-            }
-            break;
-            case 'H':
-            {
-                val = (rpc_data_type_t *)va_arg(args, uint16_t *);
-                memcpy(val, &data[offset], sizeof(val->u16));
-                val->u16 = be16toh(val->u16);
-                printf("UNPACK: uint16_t -> %"PRIu16"\n", val->u16);
-                offset += sizeof(val->u16);
-            }
-            break;
-            case 'h':
-            {
-                val = (rpc_data_type_t *)va_arg(args, int16_t *);
-                memcpy(val, &data[offset], sizeof(val->i16));
-                val->i16 = be16toh(val->i16);
-                printf("UNPACK: int16_t -> %"PRIi16"\n", val->i16);
-                offset += sizeof(val->i16);
-            }
-            break;
-            case 'B':
-            {
-                val = (rpc_data_type_t *)va_arg(args, uint8_t *);
-                memcpy(val, &data[offset], sizeof(val->u8));
-                val->u8 = val->u8;
-                printf("UNPACK: uint8_t -> %"PRIu8"\n", val->u8);
-                offset += sizeof(val->u8);
-            }
-            break;
-            case 'b':
-            {
-                val = (rpc_data_type_t *)va_arg(args, int8_t *);
-                memcpy(val, &data[offset], sizeof(val->i8));
-                val->i8 = val->i8;
-                printf("UNPACK: int8_t -> %"PRIi8"\n", val->i8);
-                offset += sizeof(val->i8);
-            }
-            break;
-            case 'f':
-            {
-                val = (rpc_data_type_t *)va_arg(args, float *);
-                memcpy(val, &data[offset], sizeof(val->flt));
-                val->u32 = be32toh(val->u32);
-                printf("UNPACK: float -> %f\n", val->flt);
-                offset += sizeof(val->flt);
-            }
-            break;
-            case 'd':
-            {
-                val = (rpc_data_type_t *)va_arg(args, double *);
-                memcpy(val, &data[offset], sizeof(val->dbl));
-                val->u64 = be64toh(val->u64);
-                printf("UNPACK: double -> %0.15f\n", val->dbl);
-                offset += sizeof(val->dbl);
-            }
-            break;
-        }
 
-        fmt++;
+            fmt++;
+        }
     }
 
     return offset;
