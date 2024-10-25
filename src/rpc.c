@@ -464,7 +464,7 @@ static csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg) {
     return packet;
 }
 
-static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc_server_callback_t *handler, void *ctx) {
+static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet) {
 
     rpc_msg_t *req_msg = (rpc_msg_t *)packet->data;
     csp_packet_t *reply = NULL;
@@ -485,9 +485,26 @@ static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet, rpc
 
             reply = rpc_result_prepare(me, req_msg);
 
-            if (handler) {
+            const rpc_program_t *prg = NULL;
+
+            /* Find a possibly matching program handler */
+            extern const rpc_program_t __start_rpc_programs;
+            extern const rpc_program_t __stop_rpc_programs;
+            const rpc_program_t *iter = &__start_rpc_programs;
+            printf("start: %p, end: %p\n", &__start_rpc_programs, &__stop_rpc_programs);
+            while (iter != &__stop_rpc_programs) {
+                if (iter->program_id == program) {
+                    /* We found a match */
+                    printf("RPC: '%s'\n", iter->name);
+                    prg = iter;
+                    break;
+                }
+                iter++;
+            }
+
+            if (prg) {
                 rpc_msg_t *reply_msg = (rpc_msg_t *)reply->data;
-                (*handler)(me, program, procedure, req_msg, reply_msg, ctx);
+                (*prg->handler)(me, program, procedure, req_msg, reply_msg, prg->data);
                 reply->length += be16toh(reply_msg->reply.data_len);
                 printf("rpc_msg_reply: data_len=%"PRId16"\n", be16toh(reply_msg->reply.data_len));
             }
@@ -547,7 +564,7 @@ bool rpc_waitfor_connections(rpc_server_t *me) {
     return true;
 }
 
-bool rpc_handle_connection(rpc_server_t *me, rpc_server_callback_t *cb, void *cb_ctx) {
+bool rpc_handle_connection(rpc_server_t *me) {
 
     /* Read request packets on connection, timeout is 10 s */
     csp_packet_t *request = csp_read(me->conn, 10000);
@@ -559,7 +576,7 @@ bool rpc_handle_connection(rpc_server_t *me, rpc_server_callback_t *cb, void *cb
 
     /* Handle the RPC request (call) and send the reply */
     csp_packet_t *reply = NULL;
-    reply = rpc_handle_msg(me, request, cb, cb_ctx);
+    reply = rpc_handle_msg(me, request);
     if (reply) {
         csp_send(me->conn, reply);
     }

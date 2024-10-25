@@ -137,6 +137,27 @@ typedef struct rpc_server_s {
     const rpc_api_t *api;
 } rpc_server_t;
 
+typedef struct rpc_program_s {
+    const uint32_t program_id;
+    const char *name;
+    rpc_server_callback_t *handler;
+    const rpc_api_t *api;
+    const rpc_procedure_t *procedures;
+    void *data;
+} rpc_program_t;
+
+#define RPC_STRINGIFY(_x) #_x
+#define RPC_DECLARE_PROGRAM(_nAME, _pROGRAMiD, _hANDLER, _aPI, _pROCEDURES, _dATA) \
+    __attribute__((used,section("rpc_programs"))) \
+    static const rpc_program_t __rpc_program_##_nAME##_instance = { \
+        .name = RPC_STRINGIFY(_nAME), \
+        .program_id = (_pROGRAMiD), \
+        .handler = _hANDLER, \
+        .api = _aPI, \
+        .procedures = _pROCEDURES, \
+        .data = _dATA, \
+    };
+
 /* Client side methods */
 extern int rpc_connect(rpc_client_t *me, uint16_t node);
 extern int rpc_disconnect(rpc_client_t *me);
@@ -146,7 +167,7 @@ extern int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedur
 extern int rpc_start_server(rpc_server_t *me);
 extern int rpc_stop_server(rpc_server_t *me);
 extern bool rpc_waitfor_connections(rpc_server_t *me);
-extern bool rpc_handle_connection(rpc_server_t *me, rpc_server_callback_t *handler, void *cb_ctx);
+extern bool rpc_handle_connection(rpc_server_t *me);
 
 /* Server side call handler methods */
 extern int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...);
