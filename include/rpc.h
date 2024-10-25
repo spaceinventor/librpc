@@ -43,8 +43,12 @@ extern "C" {
  * 
  */
 typedef enum rpc_program_procedures_e {
-    RPC_PROCEDURE_INFO = 0,
+    RPC_PROCEDURE_FETCH = 0,
 } rpc_program_procedures_t;
+
+typedef struct rpc_fetch_result_s {
+
+} rpc_fetch_result_t;
 
 typedef enum rpc_msg_type_e {
     RPC_MSG_CALL = 0,
@@ -186,12 +190,14 @@ typedef struct rpc_server_s {
 } rpc_server_t;
 
 /* Client side methods */
+extern rpc_client_t *global_rpc_client;
 extern int rpc_init_client(rpc_client_t *me);
 extern int rpc_connect(rpc_client_t *me, uint16_t node);
 extern int rpc_disconnect(rpc_client_t *me);
 extern int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...);
 
 /* Main loop server side methods */
+extern rpc_server_t *global_rpc_server;
 extern int rpc_start_server(rpc_server_t *me);
 extern int rpc_stop_server(rpc_server_t *me);
 extern bool rpc_waitfor_connections(rpc_server_t *me);
@@ -209,6 +215,7 @@ extern void rpc_result_push_uint64(rpc_server_t *me, uint64_t value, rpc_msg_t *
 extern void rpc_result_push_int64(rpc_server_t *me, int64_t value, rpc_msg_t *msg);
 extern void rpc_result_push_float(rpc_server_t *me, float value, rpc_msg_t *msg);
 extern void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg);
+extern void rpc_result_push_string(rpc_server_t *me, const char *value, rpc_msg_t *msg);
 
 #ifdef __cplusplus
 }

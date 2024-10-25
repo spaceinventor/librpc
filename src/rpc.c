@@ -17,7 +17,11 @@ typedef union rpc_data_type_u {
     uint64_t    u64;
     float       flt;
     double      dbl;
+    const char *str;
 } rpc_data_type_t;
+
+rpc_client_t *global_rpc_client = NULL;
+rpc_server_t *global_rpc_server = NULL;
 
 static const rpc_program_t * lookup_program_from_id(rpc_module_t *module, uint32_t id) {
 
@@ -142,6 +146,14 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         memcpy(&(call->data[data_len]), &value, sizeof(uint64_t));
                         data_len += sizeof(uint64_t);
                     } break;
+                    case 's':
+                    {
+                        const char *value = (const char *)va_arg(*args, const char *);
+                        printf("PACK: string -> '%s'\n", value);
+                        size_t size = strlen(value) + 1;
+                        memcpy(&(call->data[data_len]), value, size);
+                        data_len += size;
+                    } break;
                 }
 
                 pfmt++;
@@ -253,6 +265,15 @@ static uint16_t rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, va_list
                     val->u64 = be64toh(val->u64);
                     printf("UNPACK: double -> %0.15f\n", val->dbl);
                     offset += sizeof(val->dbl);
+                }
+                break;
+                case 's':
+                {
+                    val = (rpc_data_type_t *)va_arg(args, char *);
+                    size_t size = strlen(val->str) + 1;
+                    memcpy(val, &data[offset], size);
+                    printf("UNPACK: string -> %s\n", val->str);
+                    offset += size;
                 }
                 break;
             }
@@ -386,6 +407,20 @@ void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg) {
     v.u64 = htobe64(v.u64);
     memcpy(&reply->data[data_len], &v.u64, sizeof(double));
     data_len += sizeof(double);
+    reply->data_len = htobe16(data_len);
+}
+
+void rpc_result_push_string(rpc_server_t *me, const char *value, rpc_msg_t *msg) {
+
+    rpc_reply_t *reply = &msg->reply;
+    uint16_t data_len = be16toh(reply->data_len);
+
+    printf("RESPUSH: string -> '%s'\n", value);
+    rpc_data_type_t v;
+    v.str = value;
+    size_t size = strlen(v.str) + 1; /* Including the NULL termination character */
+    memcpy(&reply->data[data_len], v.str, size);
+    data_len += size;
     reply->data_len = htobe16(data_len);
 }
 
@@ -556,6 +591,8 @@ int rpc_init_client(rpc_client_t *me) {
     }
     printf("RPC Client: Registered %"PRId32" programs\n", me->module.nof_programs);
 
+    global_rpc_client = me;
+
     return 0;
 }
 
@@ -587,6 +624,8 @@ int rpc_start_server(rpc_server_t *me) {
     if (res != CSP_ERR_NONE) {
         return -1;
     }
+
+    global_rpc_server = me;
 
     return 0;
 }
@@ -641,30 +680,46 @@ bool rpc_handle_connection(rpc_server_t *me) {
     return true;
 }
 
-static void rpc_prg_handler(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply, void *data) {
+int rpc_fetch(uint16_t node, char *result) {
+
+    int res = -1;
+
+    res = rpc_connect(global_rpc_client, node);
+    if (!res) {
+        res = rpc_call_invoke(global_rpc_client, RPC_PROGRAM_RPC, RPC_PROCEDURE_FETCH,
+            /*ARGS*/
+                /*void*/
+            /*RETURN*/
+                result
+        );
+        if (res) {
+            printf("DSUC: Could not call RPC_PROCEDURE_FETCH - %i\n", res);
+        }
+        rpc_disconnect(global_rpc_client);
+    }
+
+    return res;
+}
+
+static void rpc_prpgram_handler(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply, void *data) {
 
     switch (procedure) {
-        case RPC_PROCEDURE_INFO:
+        case RPC_PROCEDURE_FETCH:
         {
-            uint32_t id;
+            printf("RPC: rpc_fetch()\n");
 
-            /* De-serialize the arguments */
-            rpc_call_deserialize(me, call, &id);
-
-            printf("RPC Prg: info()(%"PRIu32")\n", id);
-
-            rpc_result_push_int32(me, (uint32_t)0x1234, reply);
+            rpc_result_push_string(me, "Hello RPC world!", reply);
         }
         break;
         default:
-            printf("RPC Prg: Unhandled RPC procedure call: 0x%"PRIX32"\n", procedure);
+            printf("RPC: Unhandled RPC procedure call: 0x%"PRIX32"\n", procedure);
             break;
     }
 }
 
-static const rpc_procedure_t g_rpc_prg_procedures[] = {
-    { .id = RPC_PROCEDURE_INFO, .name = "rpc_info", .arg_fmt = "L", .res_fmt = "L" },
+static const rpc_procedure_t g_rpc_procedures[] = {
+    { .id = RPC_PROCEDURE_FETCH, .name = "rpc_fetch", .arg_fmt = NULL, .res_fmt = "s" },
     RPC_PROCEDURE_NULL_INIT
 };
 
-RPC_DECLARE_PROGRAM( rpc_server, RPC_PROGRAM_RPC, rpc_prg_handler, NULL, &g_rpc_prg_procedures[0], NULL );
+RPC_DECLARE_PROGRAM( rpc_server, RPC_PROGRAM_RPC, rpc_prpgram_handler, NULL, &g_rpc_procedures[0], NULL );
