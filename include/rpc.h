@@ -21,13 +21,6 @@ extern "C" {
 #define CSP_PORT_RPC_SERVER 9
 
 /**
- * @brief RPC message type
- * 
- * The message type could either be a Call or a Reply.
- * 
- */
-
-/**
  * @brief The RPC program id for the RPC server
  * 
  * This program id is used exclusively by the RPC
@@ -43,11 +36,18 @@ extern "C" {
  * 
  */
 typedef enum rpc_program_procedures_e {
-    RPC_PROCEDURE_FETCH = 0,
+    RPC_PROCEDURE_FETCH_FIRST = 0,
+    RPC_PROCEDURE_FETCH_NEXT = 1,
 } rpc_program_procedures_t;
 
 typedef struct rpc_fetch_result_s {
-
+    int32_t result;
+    uint32_t program_id;
+    char program_name[64];
+    uint32_t procedure_id;
+    char procedure_name[64];
+    char arg_fmt[64];
+    char res_fmt[64];
 } rpc_fetch_result_t;
 
 typedef enum rpc_msg_type_e {
@@ -216,6 +216,10 @@ extern void rpc_result_push_int64(rpc_server_t *me, int64_t value, rpc_msg_t *ms
 extern void rpc_result_push_float(rpc_server_t *me, float value, rpc_msg_t *msg);
 extern void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg);
 extern void rpc_result_push_string(rpc_server_t *me, const char *value, rpc_msg_t *msg);
+
+/* RPC client program procedures */
+extern int rpc_fetch_first(uint16_t node, rpc_fetch_result_t *result);
+extern int rpc_fetch_next(uint16_t node, rpc_fetch_result_t *result);
 
 #ifdef __cplusplus
 }
