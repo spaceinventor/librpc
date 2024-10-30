@@ -55,9 +55,26 @@ typedef enum rpc_msg_type_e {
     RPC_MSG_REPLY = 1,
 } rpc_msg_type_t;
 
+typedef enum rpc_proc_arg_type_e {
+    RPC_SIGNED_CHAR = 0,
+    RPC_UNSIGNED_CHAR = 1,
+    RPC_INT8 = 2,
+    RPC_UINT8 = 3,
+    RPC_INT16 = 4,
+    RPC_UINT16 = 5,
+    RPC_INT32 = 6,
+    RPC_UINT32 = 7,
+    RPC_INT64 = 8,
+    RPC_UINT64 = 9,
+    RPC_FLOAT = 10,
+    RPC_DOUBLE = 11,
+    RPC_STRING = 12,
+} rpc_proc_arg_type_t;
+
 typedef struct rpc_proc_arg_s {
     const char * const name;
     const uint8_t type;
+    const char * const descr;
 } rpc_proc_arg_t;
 
 #define RPC_PROC_ARG_NULL_INIT { .name = NULL, .type = 0 }
@@ -72,13 +89,14 @@ typedef struct rpc_proc_arg_s {
 typedef struct rpc_procedure_s {
     uint32_t id;
     const char *name;
+    const char * const descr;
     const char *arg_fmt;
     const char *res_fmt;
     const rpc_proc_arg_t *args;
     const rpc_proc_arg_t *result;
 } rpc_procedure_t;
 
-#define RPC_PROCEDURE_NULL_INIT {.id = 0xFFFFFFFFUL, .name = NULL, .arg_fmt = NULL, .res_fmt = NULL }
+#define RPC_PROCEDURE_NULL_INIT { .id = 0xFFFFFFFFUL, .name = NULL, .arg_fmt = NULL, .res_fmt = NULL, .args = NULL, .result = NULL }
 
 /**
  * @brief RPC call message type
