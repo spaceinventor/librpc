@@ -851,6 +851,22 @@ static void rpc_program_handler(rpc_server_t *me, uint32_t program, uint32_t pro
     }
 }
 
+typedef enum rpc_proc_arg_type_e {
+    RPC_SIGNED_CHAR = 0,
+    RPC_UNSIGNED_CHAR = 1,
+    RPC_INT8 = 2,
+    RPC_UINT8 = 3,
+    RPC_INT16 = 4,
+    RPC_UINT16 = 5,
+    RPC_INT32 = 6,
+    RPC_UINT32 = 7,
+    RPC_INT64 = 8,
+    RPC_UINT64 = 9,
+    RPC_FLOAT = 10,
+    RPC_DOUBLE = 11,
+    RPC_STRING = 12,
+} rpc_proc_arg_type_t;
+
 static rpc_prg_data_t g_prg_data = {
     .iter_prg = NULL,
     .iter_proc = NULL,
@@ -858,8 +874,33 @@ static rpc_prg_data_t g_prg_data = {
 
 static const rpc_procedure_t g_rpc_procedures[] = {
     { .id = RPC_PROCEDURE_FETCH_FIRST, .name = "rpc_fetch_first", .arg_fmt = NULL, .res_fmt = "lLsLsss" },
-    { .id = RPC_PROCEDURE_FETCH_NEXT, .name = "rpc_fetch_next", .arg_fmt = NULL, .res_fmt = "lLsLsss" },
-    RPC_PROCEDURE_NULL_INIT
+        .args = NULL,
+        .result = (const rpc_proc_arg_t [])
+        {
+            { .name = "status", .type = RPC_INT32 },
+            { .name = "program_id", .type = RPC_UINT32 },
+            { .name = "program_name", .type = RPC_STRING },
+            { .name = "procedure_id", .type = RPC_UINT32 },
+            { .name = "procedure_name", .type = RPC_STRING },
+            { .name = "arg_fmt", .type = RPC_STRING },
+            { .name = "res_fmt", .type = RPC_STRING },
+            RPC_PROC_ARG_NULL_INIT,
+        },
+    { .id = RPC_PROCEDURE_FETCH_NEXT, .name = "rpc_fetch_next", .arg_fmt = NULL, .res_fmt = "lLsLsss",
+        .args = NULL,
+        .result = (const rpc_proc_arg_t [])
+        {
+            { .name = "status", .type = RPC_INT32 },
+            { .name = "program_id", .type = RPC_UINT32 },
+            { .name = "program_name", .type = RPC_STRING },
+            { .name = "procedure_id", .type = RPC_UINT32 },
+            { .name = "procedure_name", .type = RPC_STRING },
+            { .name = "arg_fmt", .type = RPC_STRING },
+            { .name = "res_fmt", .type = RPC_STRING },
+            RPC_PROC_ARG_NULL_INIT,
+        },
+    },
+    RPC_PROCEDURE_NULL_INIT,
 };
 
 RPC_DECLARE_PROGRAM( rpc_server, RPC_PROGRAM_RPC, rpc_program_handler, NULL, &g_rpc_procedures[0], &g_prg_data );

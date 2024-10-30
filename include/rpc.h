@@ -55,6 +55,13 @@ typedef enum rpc_msg_type_e {
     RPC_MSG_REPLY = 1,
 } rpc_msg_type_t;
 
+typedef struct rpc_proc_arg_s {
+    const char * const name;
+    const uint8_t type;
+} rpc_proc_arg_t;
+
+#define RPC_PROC_ARG_NULL_INIT { .name = NULL, .type = 0 }
+
 /**
  * @brief RPC procedure object type
  * 
@@ -67,6 +74,8 @@ typedef struct rpc_procedure_s {
     const char *name;
     const char *arg_fmt;
     const char *res_fmt;
+    const rpc_proc_arg_t *args;
+    const rpc_proc_arg_t *result;
 } rpc_procedure_t;
 
 #define RPC_PROCEDURE_NULL_INIT {.id = 0xFFFFFFFFUL, .name = NULL, .arg_fmt = NULL, .res_fmt = NULL }
