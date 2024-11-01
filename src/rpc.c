@@ -6,7 +6,7 @@
 
 #include "rpc.h"
 
-#if 0
+#if 1
 #define RPC_DBG(...) printf(__VA_ARGS__)
 #else
 #define RPC_DBG(...) do {} while(0)
@@ -160,6 +160,22 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         memcpy(&(call->data[data_len]), value, size);
                         data_len += size;
                     } break;
+                    case 'p':
+                    {
+                        /* Special case with two-args; one for length and one with a pointer */
+                        uint16_t bytes_len = (uint16_t)va_arg(*args, unsigned int);
+                        const char *bytes = (const char *)va_arg(*args, const char *);
+                        RPC_DBG("PACK: data[%"PRIu16"] -> ...\n", bytes_len);
+                        /* Write the data buffer length into the packet */
+                        rpc_data_type_t value;
+                        value.u16 = htobe16(bytes_len);
+                        memcpy(&(call->data[data_len]), &value, sizeof(value.u16));
+                        data_len += sizeof(value.u16);
+                        /* Write the actual data buffer content into the packet */
+                        memcpy(&(call->data[data_len]), bytes, bytes_len);
+                        data_len += bytes_len;
+                    }
+                    break;
                 }
 
                 pfmt++;
@@ -280,6 +296,27 @@ static uint16_t rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, va_list
                     memcpy(str, &data[offset], size);
                     RPC_DBG("UNPACK: string -> %s\n", str);
                     offset += size;
+                }
+                break;
+                case 'p':
+                {
+                    /* Special case of 'p', which is a pointer to a buffer of bytes of a certain length */
+                    uint32_t bytes_len = (uint32_t)va_arg(args, uint32_t);
+                    uint8_t *bytes = (uint8_t *)va_arg(args, uint8_t *);
+                    /* Grab the length of the bytes buffer from the packet */
+                    rpc_data_type_t _len;
+                    memcpy(&_len, &data[offset], sizeof(_len.u16));
+                    _len.u16 = be16toh(_len.u16);
+                    RPC_DBG("UNPACK: bytes[%"PRIu16"] -> ...\n", _len.u16);
+                    /* Advance past the <length> field in the packet */
+                    offset += sizeof(_len.u16);
+                    uint16_t copylen = _len.u16;
+                    /* Truncate to the receiving buffer capability */
+                    if (copylen > bytes_len) {
+                        copylen = bytes_len;
+                    }
+                    memcpy(bytes, &data[offset], copylen);
+                    offset += copylen;
                 }
                 break;
             }
@@ -432,6 +469,26 @@ void rpc_result_push_string(rpc_server_t *me, const char *value, rpc_msg_t *msg)
     size_t size = strlen(v.str) + 1; /* Including the NULL termination character */
     memcpy(&reply->data[data_len], v.str, size);
     data_len += size;
+    reply->data_len = htobe16(data_len);
+}
+
+void rpc_result_push_buffer(rpc_server_t *me, const uint8_t *value, uint16_t len, rpc_msg_t *msg) {
+
+    rpc_reply_t *reply = &msg->reply;
+    uint16_t data_len = be16toh(reply->data_len);
+
+    RPC_DBG("RESPUSH: buffer[%"PRIu16"] -> ...\n", len);
+    /* Put the buffer length into the packet */
+    rpc_data_type_t v;
+    v.u16 = len;
+    memcpy(&reply->data[data_len], &v.u16, sizeof(uint16_t));
+    data_len += sizeof(uint16_t);
+    /* Put the data into the packet - if any */
+    if (len > 0) {
+        memcpy(&reply->data[data_len], value, len);
+        data_len += len;
+    }
+
     reply->data_len = htobe16(data_len);
 }
 

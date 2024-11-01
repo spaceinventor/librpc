@@ -243,6 +243,7 @@ extern void rpc_result_push_int64(rpc_server_t *me, int64_t value, rpc_msg_t *ms
 extern void rpc_result_push_float(rpc_server_t *me, float value, rpc_msg_t *msg);
 extern void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg);
 extern void rpc_result_push_string(rpc_server_t *me, const char *value, rpc_msg_t *msg);
+extern void rpc_result_push_buffer(rpc_server_t *me, const uint8_t *value, uint16_t len, rpc_msg_t *msg);
 
 /* RPC client program procedures */
 extern int rpc_fetch_first(uint16_t node, rpc_fetch_result_t *result);
