@@ -481,6 +481,7 @@ void rpc_result_push_buffer(rpc_server_t *me, const uint8_t *value, uint16_t len
     /* Put the buffer length into the packet */
     rpc_data_type_t v;
     v.u16 = len;
+    v.u16 = be16toh(v.u16);
     memcpy(&reply->data[data_len], &v.u16, sizeof(uint16_t));
     data_len += sizeof(uint16_t);
     /* Put the data into the packet - if any */
