@@ -6,7 +6,7 @@
 
 #include "rpc.h"
 
-#if 1
+#if 0
 #define RPC_DBG(...) printf(__VA_ARGS__)
 #else
 #define RPC_DBG(...) do {} while(0)
