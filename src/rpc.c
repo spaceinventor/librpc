@@ -507,7 +507,7 @@ int rpc_connect(rpc_client_t *me, uint16_t node) {
             RPC_DBG("RPC-C: Could not connect to RPC service\n");
             return -1;
         }
-        printf("RPC-C: Connected to service\n");
+        RPC_DBG("RPC-C: Connected to service\n");
     }
 
     return 0;
@@ -577,8 +577,8 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     /* Send the RPC call to the RPC server */
     csp_send(me->conn, request);
 
-    /* Wait for the reply from the client */
-    csp_packet_t *reply = csp_read(me->conn, 100);
+    /* Wait for the reply from the client - this might take up to 10 seconds */
+    csp_packet_t *reply = csp_read(me->conn, 10000);
     if (reply) {
         const rpc_procedure_t *rpc = lookup_procedure_from_id(prg, procedure);
         rpc_msg_t *msg = (rpc_msg_t *)reply->data;
@@ -593,6 +593,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
         csp_buffer_free(reply);
     } else {
         RPC_DBG("RPC-C: Timeout waiting for reply\n");
+        return -1;
     }
 
     va_end(args);
@@ -761,6 +762,9 @@ bool rpc_handle_connection(rpc_server_t *me) {
         RPC_DBG("RPC-S: Send reply\n");
         csp_send(me->conn, reply);
     }
+
+    /* Free the request packet */
+    csp_buffer_free(request);
 
     /* We still have a valid connection */
     return true;
