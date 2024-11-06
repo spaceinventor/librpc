@@ -214,6 +214,7 @@ typedef struct rpc_server_s {
     csp_conn_t *conn;
     csp_socket_t sock;
     rpc_module_t module;
+    uint8_t spad_buffer[2000];
 } rpc_server_t;
 
 /* Client side methods */
