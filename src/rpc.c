@@ -8,9 +8,13 @@
 
 #if 0
 #define RPC_DBG(...) printf(__VA_ARGS__)
+#define RPC_WRN(...) printf(__VA_ARGS__)
 #else
 #define RPC_DBG(...) do {} while(0)
+#define RPC_WRN(...) do {} while(0)
 #endif
+
+#define RPC_ERR(...) printf(__VA_ARGS__)
 
 typedef union rpc_data_type_u {
     int8_t      i8;
@@ -495,12 +499,15 @@ void rpc_result_push_buffer(rpc_server_t *me, const uint8_t *value, uint16_t len
 
 int rpc_connect(rpc_client_t *me, uint16_t node) {
 
-    /* Create an RDP connection with the particular RPC server node */
-    RPC_DBG("RPC: Connecting the RPC service on %"PRIu16"\n", node);
-    me->conn = csp_connect(CSP_PRIO_HIGH, node, CSP_PORT_RPC_SERVER, 0, CSP_O_RDP);
-    if (me->conn == NULL) {
-        RPC_DBG("RPC: Could not connect to RPC service\n");
-        return -1;
+    if (!me->conn) {
+        /* Create an RDP connection with the particular RPC server node */
+        RPC_DBG("RPC-C: Connecting the RPC service on %"PRIu16"\n", node);
+        me->conn = csp_connect(CSP_PRIO_HIGH, node, CSP_PORT_RPC_SERVER, 0, CSP_O_NONE);
+        if (me->conn == NULL) {
+            RPC_DBG("RPC-C: Could not connect to RPC service\n");
+            return -1;
+        }
+        printf("RPC-C: Connected to service\n");
     }
 
     return 0;
@@ -509,7 +516,9 @@ int rpc_connect(rpc_client_t *me, uint16_t node) {
 int rpc_disconnect(rpc_client_t *me) {
 
     if (me && me->conn) {
+        RPC_DBG("RPC-C: Close connection\n");
         csp_close(me->conn);
+        me->conn = NULL;
     }
 
     return 0;
@@ -538,6 +547,10 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
 
     /* Allocate the CSP packet for the RPC object */
     csp_packet_t *request = csp_buffer_get(0);
+    if (!request) {
+        RPC_ERR("RPC-C: Could not get CSP buffer\n");
+        return -1;
+    }
 
     /* Create the RPC call protocol message to send to the RPC server */
     va_list args;
@@ -547,7 +560,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     const rpc_program_t *prg = lookup_program_from_id(&me->module, program);
 
     if (!prg) {
-        RPC_DBG("ERROR: RPC client could not find program: 0x%08"PRIX32"\n", program);
+        RPC_ERR("RPC-C: Error, could not find program: 0x%08"PRIX32"\n", program);
         return -1;
     }
 
@@ -571,7 +584,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
         rpc_msg_t *msg = (rpc_msg_t *)reply->data;
         uint16_t data_len = be16toh(msg->reply.data_len);
 
-        RPC_DBG("rpc_reply: data_len=%"PRId16", data=%p\n", data_len, &msg->reply.data[0]);
+        RPC_DBG("RPC-C: rpc_reply: data_len=%"PRId16", data=%p\n", data_len, &msg->reply.data[0]);
 
         if (rpc) {
             rpc_unpack(&msg->reply.data[0], data_len, rpc->res_fmt, args);
@@ -579,7 +592,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
 
         csp_buffer_free(reply);
     } else {
-        RPC_DBG("RPC: Timeout waiting for reply\n");
+        RPC_DBG("RPC-C: Timeout waiting for reply\n");
     }
 
     va_end(args);
@@ -610,7 +623,7 @@ static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet) {
     csp_packet_t *reply = NULL;
 
     if (req_msg->version != RPC_VERSION) {
-        RPC_DBG("ERROR: Wrong RPC version in message.\n");
+        RPC_ERR("RPC-S: Error, wrong RPC version in message.\n");
         return NULL;
     }
 
@@ -621,20 +634,19 @@ static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet) {
             uint32_t program = be32toh(req_msg->call.program);
             uint32_t procedure = be32toh(req_msg->call.procedure);
 
-            RPC_DBG("rpc_msg_call: data_len=%"PRId16",program=0x%"PRIX32",procedure=%"PRIu32"\n", data_len, program, procedure);
+            RPC_DBG("RPC-S: rpc_msg_call: data_len=%"PRId16",program=0x%"PRIX32",procedure=%"PRIu32"\n", data_len, program, procedure);
 
             reply = rpc_result_prepare(me, req_msg);
-
-            /* Find a possibly matching program handler */
-            const rpc_program_t *prg = lookup_program_from_id(&me->module, program);
-            if (prg) {
-                /* We found a match, call the associated handler */
-                rpc_msg_t *reply_msg = (rpc_msg_t *)reply->data;
-                (*prg->handler)(me, program, procedure, req_msg, reply_msg, prg->data);
-                reply->length += be16toh(reply_msg->reply.data_len);
-                RPC_DBG("rpc_msg_reply: data_len=%"PRId16"\n", be16toh(reply_msg->reply.data_len));
-                /* Do not try to find any other matches */
-                break;
+            if (reply) {
+                /* Find a possibly matching program handler */
+                const rpc_program_t *prg = lookup_program_from_id(&me->module, program);
+                if (prg) {
+                    /* We found a match, call the associated handler */
+                    rpc_msg_t *reply_msg = (rpc_msg_t *)reply->data;
+                    (*prg->handler)(me, program, procedure, req_msg, reply_msg, prg->data);
+                    reply->length += be16toh(reply_msg->reply.data_len);
+                    RPC_DBG("RPC-S: rpc_msg_reply: data_len=%"PRId16"\n", be16toh(reply_msg->reply.data_len));
+                }
             }
         }
         break;
@@ -652,15 +664,17 @@ int rpc_init_client(rpc_client_t *me) {
     const rpc_program_t *iter = &__start_rpc_programs;
     me->module.nof_programs = 0;
     me->module.programs = &__start_rpc_programs;
-    RPC_DBG("RPC Client: Registering programs from address: %p\n", me->module.programs);
+    RPC_DBG("RPC-C: Registering programs from address: %p\n", me->module.programs);
     while (iter != &__stop_rpc_programs) {
         RPC_DBG("  0x%08"PRIX32", '%s'\n", iter->program_id, iter->name);
         me->module.nof_programs++;
         iter++;
     }
-    RPC_DBG("RPC Client: Registered %"PRId32" programs\n", me->module.nof_programs);
+    RPC_DBG("RPC-C: Registered %"PRId32" programs\n", me->module.nof_programs);
 
     global_rpc_client = me;
+
+    me->conn = NULL;
 
     return 0;
 }
@@ -673,16 +687,17 @@ int rpc_start_server(rpc_server_t *me) {
     const rpc_program_t *iter = &__start_rpc_programs;
     me->module.nof_programs = 0;
     me->module.programs = &__start_rpc_programs;
-    RPC_DBG("RPC Server: Registering programs from address: %p\n", me->module.programs);
+    RPC_DBG("RPC-S: Registering programs from address: %p\n", me->module.programs);
     while (iter != &__stop_rpc_programs) {
         RPC_DBG("  0x%08"PRIX32", '%s'\n", iter->program_id, iter->name);
         me->module.nof_programs++;
         iter++;
     }
-    RPC_DBG("RPC Server: Registered %"PRId32" programs\n", me->module.nof_programs);
+    RPC_DBG("RPC-S: Registered %"PRId32" programs\n", me->module.nof_programs);
 
+    memset(&me->sock, 0, sizeof(me->sock));
     int res;
-    me->sock.opts = CSP_O_RDP /*CSP_O_NONE*/;
+    me->sock.opts = CSP_O_NONE;
     res = csp_bind(&me->sock, CSP_PORT_RPC_SERVER);
     if (res != CSP_ERR_NONE) {
         return -1;
@@ -723,7 +738,7 @@ bool rpc_waitfor_connections(rpc_server_t *me) {
     uint16_t src = csp_conn_src(me->conn);
     uint16_t sport = csp_conn_sport(me->conn);
 
-    RPC_DBG("RPC: Incoming connection from: %"PRIu16":%"PRIu16"\n", src, sport);
+    RPC_DBG("RPC-S: Incoming connection from: %"PRIu16":%"PRIu16"\n", src, sport);
 
     return true;
 }
@@ -731,17 +746,19 @@ bool rpc_waitfor_connections(rpc_server_t *me) {
 bool rpc_handle_connection(rpc_server_t *me) {
 
     /* Read request packets on connection, timeout is 10 s */
-    csp_packet_t *request = csp_read(me->conn, 10000);
+    csp_packet_t *request = csp_read(me->conn, 100000);
     if (NULL == request) {
         /* The connection is lost, tell the caller */
-        RPC_DBG("RPC: Client disconnected or timeout.\n");
+        RPC_DBG("RPC-S: Client disconnected or timeout.\n");
         return false;
     }
 
+    RPC_DBG("RPC-S: Handle message\n");
     /* Handle the RPC request (call) and send the reply */
     csp_packet_t *reply = NULL;
     reply = rpc_handle_msg(me, request);
     if (reply) {
+        RPC_DBG("RPC-S: Send reply\n");
         csp_send(me->conn, reply);
     }
 
