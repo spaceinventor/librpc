@@ -739,7 +739,7 @@ void rpc_list_remote_programs(rpc_client_t *me) {
     while(prg_iter) {
         rpc_procedure_t *pro_iter = SLIST_FIRST( &prg_iter->remote_proc );
         while (pro_iter) {
-            printf("PRG: 0x%08X, %s:%u('%s') => '%s'\n", prg_iter->program_id, pro_iter->name, pro_iter->id, pro_iter->arg_fmt, pro_iter->res_fmt);
+            RPC_DBG("PRG: 0x%08" PRIX32 ", %s:%" PRIu32 "('%s') => '%s'\n", prg_iter->program_id, pro_iter->name, pro_iter->id, pro_iter->arg_fmt, pro_iter->res_fmt);
             pro_iter = SLIST_NEXT( pro_iter, list );
         }
         prg_iter  = SLIST_NEXT( prg_iter, list );
@@ -756,7 +756,7 @@ int rpc_init_client(rpc_client_t *me, uint32_t nof_programs, rpc_program_t *prog
     me->module.programs = &__start_rpc_programs;
     RPC_DBG("RPC-C: Registering programs from address: %p\n", me->module.programs);
     while (iter != &__stop_rpc_programs) {
-        RPC_DBG("  0x%08"PRIX32", '%s'\n", iter->program_id, iter->name);
+        RPC_DBG("  0x%08" PRIX32 ", '%s'\n", iter->program_id, iter->name);
         me->module.nof_programs++;
         iter++;
     }
