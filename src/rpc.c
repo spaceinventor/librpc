@@ -748,6 +748,25 @@ void rpc_list_remote_programs(rpc_client_t *me, uint16_t node) {
         prg_iter  = SLIST_NEXT( prg_iter, list );
     }
 }
+void rpc_remove_remote_programs(rpc_client_t *me, uint16_t node) {
+
+    rpc_program_t *prg_iter = SLIST_FIRST( &me->module.remote );
+    while(prg_iter) {
+        rpc_program_t *prg_next = SLIST_NEXT( prg_iter, list );
+        if (prg_iter->node == node) {
+            rpc_procedure_t *pro_iter = SLIST_FIRST( &prg_iter->remote_proc );
+            while (pro_iter) {
+                rpc_procedure_t *pro_next = SLIST_NEXT( pro_iter, list );
+                SLIST_REMOVE( &prg_iter->remote_proc, pro_iter, rpc_procedure_s, list );
+                SLIST_INSERT_HEAD( &me->procedure_slot, pro_iter, list );
+                pro_iter = pro_next;
+            }
+            SLIST_REMOVE( &me->module.remote, prg_iter, rpc_program_s, list );
+            SLIST_INSERT_HEAD( &me->program_slot, prg_iter, list );
+        }
+        prg_iter  = prg_next;
+    }
+}
 
 int rpc_init_client(rpc_client_t *me, uint32_t nof_programs, rpc_program_t *programs, uint32_t nof_procedures, rpc_procedure_t *procedures) {
 

@@ -233,6 +233,7 @@ typedef struct rpc_server_s {
 /* Client side methods */
 extern rpc_client_t *global_rpc_client;
 extern int rpc_init_client(rpc_client_t *me, uint32_t nof_programs, rpc_program_t *programs, uint32_t nof_procedures, rpc_procedure_t *procedures);
+extern void rpc_remove_remote_programs(rpc_client_t *me, uint16_t node);
 extern rpc_program_t *rpc_register_remote_program(rpc_client_t *me, uint16_t node, uint32_t program_id);
 extern rpc_procedure_t *rpc_register_remote_procedure(rpc_client_t *me, rpc_program_t *program, uint32_t procedure_id);
 extern void rpc_list_remote_programs(rpc_client_t *me, uint16_t node);
