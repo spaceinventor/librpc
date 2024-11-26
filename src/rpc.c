@@ -584,6 +584,9 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     va_list args;
     va_start(args, procedure);
 
+    /* Grab any possible call back to use if multiple replies comes along */
+    void (*cb)(uint32_t, va_list) = va_arg(args, unsigned int);
+
     /* Find the associated program object */
     const rpc_program_t *prg = lookup_program_from_id(&me->module, program);
 
@@ -605,24 +608,37 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     /* Send the RPC call to the RPC server */
     csp_send(me->conn, request);
 
-    /* Wait for the reply from the client - this might take up to 10 seconds */
-    csp_packet_t *reply = csp_read(me->conn, 10000);
-    if (reply) {
-        const rpc_procedure_t *rpc = lookup_procedure_from_id(prg, procedure);
-        rpc_msg_t *msg = (rpc_msg_t *)reply->data;
-        uint16_t data_len = be16toh(msg->reply.data_len);
+    bool keep_replying = false;
+    do {
+        /* Wait for the reply from the client - this might take up to 10 seconds */
+        csp_packet_t *reply = csp_read(me->conn, 10000);
+        if (reply) {
+            const rpc_procedure_t *rpc = lookup_procedure_from_id(prg, procedure);
+            rpc_msg_t *msg = (rpc_msg_t *)reply->data;
+            uint16_t data_len = be16toh(msg->reply.data_len);
+            uint32_t amount = be32toh(msg->reply.amount);
+            uint32_t idx = be32toh(msg->reply.idx);
 
-        RPC_DBG("RPC-C: rpc_reply: data_len=%"PRId16", data=%p\n", data_len, &msg->reply.data[0]);
+            if (idx < amount) {
+                /* There are still more to come */
+                keep_replying = true;
+            }
 
-        if (rpc) {
-            rpc_unpack(&msg->reply.data[0], data_len, rpc->res_fmt, args);
+            RPC_DBG("RPC-C: rpc_reply: (%" PRIu32 " of %" PRIu32 ") data_len=%"PRId16", data=%p\n", idx, amount, data_len, &msg->reply.data[0]);
+
+            if (rpc) {
+                rpc_unpack(&msg->reply.data[0], data_len, rpc->res_fmt, args);
+                if (cb) {
+                    (*cb)(procedure, args);
+                }
+            }
+
+            csp_buffer_free(reply);
+        } else {
+            RPC_DBG("RPC-C: Timeout waiting for reply\n");
+            return -1;
         }
-
-        csp_buffer_free(reply);
-    } else {
-        RPC_DBG("RPC-C: Timeout waiting for reply\n");
-        return -1;
-    }
+    } while (keep_replying);
 
     va_end(args);
 
@@ -640,6 +656,8 @@ static csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg) {
         reply_msg->version = RPC_VERSION;
         reply_msg->xid = msg->xid;
         reply_msg->reply.data_len = 0;
+        reply_msg->reply.amount = 1;
+        reply_msg->reply.idx = 1;
         packet->length = sizeof(reply_msg->type) + sizeof(reply_msg->version) + sizeof(reply_msg->xid) + sizeof(reply_msg->reply);
     }
 

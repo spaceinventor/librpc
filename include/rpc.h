@@ -128,6 +128,8 @@ typedef struct rpc_call_s {
  * 
  */
 typedef struct rpc_reply_s {
+    uint32_t   amount;
+    uint32_t   idx;
     uint16_t   data_len;
     uint8_t    data[];
 } __attribute__((packed)) rpc_reply_t;
