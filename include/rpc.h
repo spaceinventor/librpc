@@ -1,6 +1,7 @@
 #pragma once
 
 #include <inttypes.h>
+#include <sys/queue.h>
 
 #include <csp/csp.h>
 
@@ -77,7 +78,7 @@ typedef struct rpc_proc_arg_s {
     const char * const descr;
 } rpc_proc_arg_t;
 
-#define RPC_PROC_ARG_NULL_INIT { .name = NULL, .type = 0 }
+#define RPC_PROC_ARG_NULL_INIT { .name = "", .type = 0 }
 
 /**
  * @brief RPC procedure object type
@@ -86,17 +87,21 @@ typedef struct rpc_proc_arg_s {
  * into the RPC system.
  * 
  */
+SLIST_HEAD( rpc_procedure_list_s, rpc_procedure_s );
+typedef struct rpc_procedure_list_s rpc_procedure_list_t;
+
 typedef struct rpc_procedure_s {
     uint32_t id;
-    const char *name;
+    char name[64];
+    char arg_fmt[64];
+    char res_fmt[64];
     const char * const descr;
-    const char *arg_fmt;
-    const char *res_fmt;
     const rpc_proc_arg_t *args;
     const rpc_proc_arg_t *result;
+    SLIST_ENTRY( rpc_procedure_s ) list;
 } rpc_procedure_t;
 
-#define RPC_PROCEDURE_NULL_INIT { .id = 0xFFFFFFFFUL, .name = NULL, .arg_fmt = NULL, .res_fmt = NULL, .args = NULL, .result = NULL }
+#define RPC_PROCEDURE_NULL_INIT { .id = 0xFFFFFFFFUL, .name = "", .arg_fmt = "", .res_fmt = "", .args = NULL, .result = NULL }
 
 /**
  * @brief RPC call message type
@@ -167,24 +172,24 @@ typedef struct rpc_server_s rpc_server_t;
  */
 typedef void rpc_server_callback_t(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply, void *ctx);
 
-/**
- * @brief RPC procedure lookup method prototype
- * 
- * @param id 
- * @return rpc_procedure_t *
- */
-typedef const rpc_procedure_t * rpc_lookup_procedure_t(uint32_t id);
-
-typedef struct rpc_api_s {
-    rpc_lookup_procedure_t *lookup;
-} rpc_api_t;
+SLIST_HEAD( rpc_program_list_s, rpc_program_s );
+typedef struct rpc_program_list_s rpc_program_list_t;
 
 typedef struct rpc_program_s {
-    const uint32_t program_id;
-    const char *name;
-    rpc_server_callback_t *handler;
-    const rpc_api_t *api;
-    const rpc_procedure_t *procedures;
+    uint32_t program_id;
+    char *name;
+    bool remote;
+    union {
+        struct { /* LOCAL */
+            rpc_server_callback_t *handler;
+            const rpc_procedure_t *procedures;
+        };
+        struct { /* REMOTE */
+            uint16_t node;
+            rpc_procedure_list_t remote_proc;
+            SLIST_ENTRY( rpc_program_s ) list;
+        };
+    };
     void *data;
 } rpc_program_t;
 
@@ -194,8 +199,8 @@ typedef struct rpc_program_s {
     static const rpc_program_t __rpc_program_##_nAME##_instance = { \
         .name = RPC_STRINGIFY(_nAME), \
         .program_id = (_pROGRAMiD), \
+        .remote = false, \
         .handler = _hANDLER, \
-        .api = _aPI, \
         .procedures = _pROCEDURES, \
         .data = _dATA, \
     };
@@ -203,11 +208,15 @@ typedef struct rpc_program_s {
 typedef struct rpc_module_s {
     uint32_t nof_programs;
     const rpc_program_t *programs;
+    rpc_program_list_t remote;
 } rpc_module_t;
 
 typedef struct client_s {
     csp_conn_t *conn;
     rpc_module_t module;
+    /* Free lists */
+    rpc_program_list_t program_slot;
+    rpc_procedure_list_t procedure_slot;
 } rpc_client_t;
 
 typedef struct rpc_server_s {
@@ -219,7 +228,10 @@ typedef struct rpc_server_s {
 
 /* Client side methods */
 extern rpc_client_t *global_rpc_client;
-extern int rpc_init_client(rpc_client_t *me);
+extern int rpc_init_client(rpc_client_t *me, uint32_t nof_programs, rpc_program_t *programs, uint32_t nof_procedures, rpc_procedure_t *procedures);
+extern rpc_program_t *rpc_register_remote_program(rpc_client_t *me, uint32_t program_id);
+extern rpc_procedure_t *rpc_register_remote_procedure(rpc_client_t *me, rpc_program_t *program, uint32_t procedure_id);
+extern void rpc_list_remote_programs(rpc_client_t *me);
 extern int rpc_connect(rpc_client_t *me, uint16_t node);
 extern int rpc_disconnect(rpc_client_t *me);
 extern int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...);

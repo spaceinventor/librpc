@@ -35,26 +35,54 @@ rpc_server_t *global_rpc_server = NULL;
 
 static const rpc_program_t * lookup_program_from_id(rpc_module_t *module, uint32_t id) {
 
+    const rpc_program_t *program = NULL;
+
+    /* Search the local data base initially */
     for (uint32_t n = 0; n < module->nof_programs; n++) {
         if (module->programs[n].program_id == id) {
-            return &module->programs[n];
+            program = &module->programs[n];
+            break;
         }
     }
 
-    return NULL;
+    /* Search the remote data base if we did not find a match locally */
+    if (!program) {
+        rpc_program_t *iter = SLIST_FIRST( &module->remote );
+        while (iter) {
+            if (iter->program_id == id) {
+                program = iter;
+                break;
+            }
+            iter = SLIST_NEXT( iter, list );
+        }
+    }
+
+    return program;
 }
 
 static const rpc_procedure_t * lookup_procedure_from_id(const rpc_program_t *program, uint32_t id) {
 
     const rpc_procedure_t *procedure = NULL;
-    const rpc_procedure_t *iter = program->procedures;
-
-    while (iter && iter->id != 0xFFFFFFFF) {
-        if (iter->id == id) {
-            procedure = iter;
-            break;
+    const rpc_procedure_t *iter = NULL;
+    
+    if (program->remote) {
+        iter = SLIST_FIRST( &program->remote_proc );
+        while (iter) {
+            if (iter->id == id) {
+                procedure = iter;
+                break;
+            }
+            iter = SLIST_NEXT( iter, list );
         }
-        iter++;
+    } else {
+        iter = program->procedures;
+        while (iter && iter->id != 0xFFFFFFFF) {
+            if (iter->id == id) {
+                procedure = iter;
+                break;
+            }
+            iter++;
+        }
     }
 
     return procedure;
@@ -657,7 +685,68 @@ static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet) {
 
 }
 
-int rpc_init_client(rpc_client_t *me) {
+rpc_program_t *rpc_register_remote_program(rpc_client_t *me, uint32_t program_id) {
+
+    /* Iterate thru the list of remote programs to see if we already have it */
+    rpc_program_t *iter = SLIST_FIRST( &me->module.remote );
+    while (iter) {
+        if (iter->program_id == program_id) {
+            break;
+        }
+        iter = SLIST_NEXT( iter, list );
+    }
+
+    if (!iter) {
+        /* We have not found a program by that id, grab a new one from the list */
+        iter = SLIST_FIRST( &me->program_slot );
+        if (iter) {
+            SLIST_REMOVE( &me->program_slot, iter, rpc_program_s, list );
+            iter->program_id = program_id;
+            SLIST_INIT( &iter->remote_proc );
+            SLIST_INSERT_HEAD( &me->module.remote, iter, list );
+        }
+    }
+
+    return iter;
+}
+
+rpc_procedure_t *rpc_register_remote_procedure(rpc_client_t *me, rpc_program_t *program, uint32_t procedure_id) {
+
+    /* Iterate through the procedure list to see if we already have it */
+    rpc_procedure_t *iter = SLIST_FIRST( &program->remote_proc );
+    while (iter) {
+        if (iter->id == procedure_id) {
+            break;
+        }
+        iter = SLIST_NEXT( iter, list );
+    }
+
+    if (!iter) {
+        iter = SLIST_FIRST( &me->procedure_slot );
+        if (iter) {
+            SLIST_REMOVE( &me->procedure_slot, iter, rpc_procedure_s, list );
+            iter->id = procedure_id;
+            SLIST_INSERT_HEAD( &program->remote_proc, iter, list );
+        }
+    }
+
+    return iter;
+}
+
+void rpc_list_remote_programs(rpc_client_t *me) {
+
+    rpc_program_t *prg_iter = SLIST_FIRST( &me->module.remote );
+    while(prg_iter) {
+        rpc_procedure_t *pro_iter = SLIST_FIRST( &prg_iter->remote_proc );
+        while (pro_iter) {
+            printf("PRG: 0x%08X, %s:%u('%s') => '%s'\n", prg_iter->program_id, pro_iter->name, pro_iter->id, pro_iter->arg_fmt, pro_iter->res_fmt);
+            pro_iter = SLIST_NEXT( pro_iter, list );
+        }
+        prg_iter  = SLIST_NEXT( prg_iter, list );
+    }
+}
+
+int rpc_init_client(rpc_client_t *me, uint32_t nof_programs, rpc_program_t *programs, uint32_t nof_procedures, rpc_procedure_t *procedures) {
 
     /* Initializing the client, also means parsing the programs registered */
     extern const rpc_program_t __start_rpc_programs;
@@ -672,6 +761,34 @@ int rpc_init_client(rpc_client_t *me) {
         iter++;
     }
     RPC_DBG("RPC-C: Registered %"PRId32" programs\n", me->module.nof_programs);
+
+    /* Initialize the remote program lists */
+    SLIST_INIT( &me->module.remote );
+
+    /* Initialize the remote programs and procedures place holders */
+    SLIST_INIT( &me->program_slot );
+    SLIST_INIT( &me->procedure_slot );
+
+    /* Fill up the program slots */
+    if (nof_programs && programs) {
+        while (nof_programs) {
+            programs->remote = true;
+            programs->node = 0; /* TODO: Currently not used */
+            SLIST_INIT( &programs->remote_proc );
+            SLIST_INSERT_HEAD( &me->program_slot, programs, list );
+            programs++;
+            nof_programs--;
+        }
+    }
+
+    /* Fill up the procedure slots */
+    if (nof_procedures && procedures) {
+        while (nof_procedures) {
+            SLIST_INSERT_HEAD( &me->procedure_slot, procedures, list );
+            procedures++;
+            nof_procedures--;
+        }
+    }
 
     global_rpc_client = me;
 
@@ -936,7 +1053,7 @@ static rpc_prg_data_t g_prg_data = {
 };
 
 static const rpc_procedure_t g_rpc_procedures[] = {
-    { .id = RPC_PROCEDURE_FETCH_FIRST, .name = "rpc_fetch_first", .arg_fmt = NULL, .res_fmt = "lLsLsss",
+    { .id = RPC_PROCEDURE_FETCH_FIRST, .name = "rpc_fetch_first", .arg_fmt = "", .res_fmt = "lLsLsss",
         .descr = "This method is used to fetch the first entry of RPC programs and it's associated procedures located on a module.",
         .args = NULL, /* void */
         .result = (const rpc_proc_arg_t [])
@@ -972,7 +1089,7 @@ static const rpc_procedure_t g_rpc_procedures[] = {
             RPC_PROC_ARG_NULL_INIT,
         },
     },
-    { .id = RPC_PROCEDURE_FETCH_NEXT, .name = "rpc_fetch_next", .arg_fmt = NULL, .res_fmt = "lLsLsss",
+    { .id = RPC_PROCEDURE_FETCH_NEXT, .name = "rpc_fetch_next", .arg_fmt = "", .res_fmt = "lLsLsss",
         .args = NULL, /* void */
         .result = (const rpc_proc_arg_t [])
         {
