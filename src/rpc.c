@@ -685,12 +685,12 @@ static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet) {
 
 }
 
-rpc_program_t *rpc_register_remote_program(rpc_client_t *me, uint32_t program_id) {
+rpc_program_t *rpc_register_remote_program(rpc_client_t *me, uint16_t node, uint32_t program_id) {
 
     /* Iterate thru the list of remote programs to see if we already have it */
     rpc_program_t *iter = SLIST_FIRST( &me->module.remote );
     while (iter) {
-        if (iter->program_id == program_id) {
+        if ((iter->program_id == program_id) && (iter->node == node)) {
             break;
         }
         iter = SLIST_NEXT( iter, list );
@@ -702,6 +702,7 @@ rpc_program_t *rpc_register_remote_program(rpc_client_t *me, uint32_t program_id
         if (iter) {
             SLIST_REMOVE( &me->program_slot, iter, rpc_program_s, list );
             iter->program_id = program_id;
+            iter->node = node;
             SLIST_INIT( &iter->remote_proc );
             SLIST_INSERT_HEAD( &me->module.remote, iter, list );
         }
@@ -733,14 +734,16 @@ rpc_procedure_t *rpc_register_remote_procedure(rpc_client_t *me, rpc_program_t *
     return iter;
 }
 
-void rpc_list_remote_programs(rpc_client_t *me) {
+void rpc_list_remote_programs(rpc_client_t *me, uint16_t node) {
 
     rpc_program_t *prg_iter = SLIST_FIRST( &me->module.remote );
     while(prg_iter) {
-        rpc_procedure_t *pro_iter = SLIST_FIRST( &prg_iter->remote_proc );
-        while (pro_iter) {
-            RPC_DBG("PRG: 0x%08" PRIX32 ", %s:%" PRIu32 "('%s') => '%s'\n", prg_iter->program_id, pro_iter->name, pro_iter->id, pro_iter->arg_fmt, pro_iter->res_fmt);
-            pro_iter = SLIST_NEXT( pro_iter, list );
+        if (prg_iter->node == node) {
+            rpc_procedure_t *pro_iter = SLIST_FIRST( &prg_iter->remote_proc );
+            while (pro_iter) {
+                printf("PRG: %" PRIu16 ":0x%08" PRIX32 ", %s:%" PRIu32 "('%s') => '%s'\n", prg_iter->node, prg_iter->program_id, pro_iter->name, pro_iter->id, pro_iter->arg_fmt, pro_iter->res_fmt);
+                pro_iter = SLIST_NEXT( pro_iter, list );
+            }
         }
         prg_iter  = SLIST_NEXT( prg_iter, list );
     }
