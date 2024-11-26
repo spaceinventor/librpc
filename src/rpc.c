@@ -585,7 +585,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     va_start(args, procedure);
 
     /* Grab any possible call back to use if multiple replies comes along */
-    void (*cb)(uint32_t, va_list) = va_arg(args, unsigned int);
+    void (*cb)(uint32_t, va_list) = (void (*)(uint32_t, va_list))va_arg(args, uint32_t *);
 
     /* Find the associated program object */
     const rpc_program_t *prg = lookup_program_from_id(&me->module, program);
@@ -655,9 +655,9 @@ static csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg) {
         reply_msg->type = RPC_MSG_REPLY;
         reply_msg->version = RPC_VERSION;
         reply_msg->xid = msg->xid;
-        reply_msg->reply.data_len = 0;
-        reply_msg->reply.amount = 1;
-        reply_msg->reply.idx = 1;
+        reply_msg->reply.data_len = htobe32(0);
+        reply_msg->reply.amount = htobe32(1);
+        reply_msg->reply.idx = htobe32(1);
         packet->length = sizeof(reply_msg->type) + sizeof(reply_msg->version) + sizeof(reply_msg->xid) + sizeof(reply_msg->reply);
     }
 
@@ -934,6 +934,8 @@ int rpc_fetch_first(uint16_t node, rpc_fetch_result_t *result) {
     res = rpc_connect(global_rpc_client, node);
     if (!res) {
         res = rpc_call_invoke(global_rpc_client, RPC_PROGRAM_RPC, RPC_PROCEDURE_FETCH_FIRST,
+            /* CALLBACK */
+                NULL,
             /*ARGS*/
                 /*void*/
             /*RETURN*/
@@ -961,6 +963,8 @@ int rpc_fetch_next(uint16_t node, rpc_fetch_result_t *result) {
     res = rpc_connect(global_rpc_client, node);
     if (!res) {
         res = rpc_call_invoke(global_rpc_client, RPC_PROGRAM_RPC, RPC_PROCEDURE_FETCH_NEXT,
+            /* CALLBACK */
+                NULL,
             /*ARGS*/
                 /*void*/
             /*RETURN*/
