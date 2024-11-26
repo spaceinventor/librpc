@@ -194,16 +194,20 @@ typedef struct rpc_program_s {
 } rpc_program_t;
 
 #define RPC_STRINGIFY(_x) #_x
-#define RPC_DECLARE_PROGRAM(_nAME, _pROGRAMiD, _hANDLER, _aPI, _pROCEDURES, _dATA) \
-    __attribute__((used,aligned(8),section("rpc_programs"))) \
-    static const rpc_program_t __rpc_program_##_nAME##_instance = { \
-        .name = RPC_STRINGIFY(_nAME), \
-        .program_id = (_pROGRAMiD), \
-        .remote = false, \
-        .handler = _hANDLER, \
-        .procedures = _pROCEDURES, \
-        .data = _dATA, \
-    };
+#define RPC_DECLARE_PROGRAM(_nAME, _pROGRAMiD, _hANDLER, _pROCEDURES, _dATA) \
+    static const \
+        __attribute__((__aligned__(__alignof__(rpc_program_t)))) \
+        rpc_program_t \
+        __attribute__((__used__)) \
+        __attribute__((section("rpc_programs"))) \
+        __rpc_program_##_nAME##_instance = { \
+            .name = RPC_STRINGIFY(_nAME), \
+            .program_id = (_pROGRAMiD), \
+            .remote = false, \
+            .handler = _hANDLER, \
+            .procedures = _pROCEDURES, \
+            .data = _dATA, \
+        };
 
 typedef struct rpc_module_s {
     uint32_t nof_programs;

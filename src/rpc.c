@@ -1106,4 +1106,4 @@ static const rpc_procedure_t g_rpc_procedures[] = {
     RPC_PROCEDURE_NULL_INIT,
 };
 
-RPC_DECLARE_PROGRAM( rpc_server, RPC_PROGRAM_RPC, rpc_program_handler, NULL, &g_rpc_procedures[0], &g_prg_data );
+RPC_DECLARE_PROGRAM( rpc_server, RPC_PROGRAM_RPC, rpc_program_handler, &g_rpc_procedures[0], &g_prg_data );
