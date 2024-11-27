@@ -618,6 +618,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
             rpc_msg_t *msg = (rpc_msg_t *)reply->data;
             if (msg->type != RPC_MSG_REPLY) {
                 /* We discard any other thing than REPLY messages here */
+                csp_buffer_free(reply);
                 continue;
             }
             const rpc_procedure_t *rpc = lookup_procedure_from_id(prg, procedure);
