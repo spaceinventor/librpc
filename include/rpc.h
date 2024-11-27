@@ -199,6 +199,25 @@ typedef struct rpc_program_s {
 } rpc_program_t;
 
 #define RPC_STRINGIFY(_x) #_x
+
+/**
+ * @brief RPC Program declaration macro
+ * 
+ * Use this macro to declare/instantiate a RPC program statically with the
+ * RPC framework. The user must supply a name which will be used as a textual
+ * representation of the program to the outside world alongside a unique id.
+ * 
+ * All instances of the rpc_program_t type will be placed in a special section
+ * in memory, which will be placed by the linker, and handled by the RPC module
+ * as a whole.
+ * 
+ * @param _nAME The name of the "program" to declare (not a string)
+ * @param _pROGAMiD A globally unique ID which will represent the program
+ * @param _hANDLER Pointer to an RPC server side handler (rpc_server_callback_t)
+ * @param _pROCEDURES Pointer to a list of rpc_procedure_t objects
+ * @param _dATA Pointer to some contextual data which will be passed to the handler
+ * 
+ */
 #define RPC_DECLARE_PROGRAM(_nAME, _pROGRAMiD, _hANDLER, _pROCEDURES, _dATA) \
     static const \
         __attribute__((__aligned__(__alignof__(rpc_program_t)))) \
