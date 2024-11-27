@@ -580,21 +580,22 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
         return -1;
     }
 
-    /* Create the RPC call protocol message to send to the RPC server */
+    /* Setup the argument list */
     va_list args;
     va_start(args, procedure);
 
     /* Grab any possible call back to use if multiple replies comes along */
-    void (*cb)(uint32_t, va_list) = (void (*)(uint32_t, va_list))va_arg(args, uint32_t *);
+    void (*multires_cb)(uint32_t, va_list) = (void (*)(uint32_t, va_list))va_arg(args, void *);
 
     /* Find the associated program object */
     const rpc_program_t *prg = lookup_program_from_id(&me->module, program);
-
     if (!prg) {
         RPC_ERR("RPC-C: Error, could not find program: 0x%08"PRIX32"\n", program);
+        csp_buffer_free(request);
         return -1;
     }
 
+    /* Create the RPC call protocol message to send to the RPC server */
     rpc_msg_t *req_msg = (rpc_msg_t *)request->data;
     req_msg->type = RPC_MSG_CALL;
     req_msg->version = RPC_VERSION;
@@ -608,32 +609,37 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     /* Send the RPC call to the RPC server */
     csp_send(me->conn, request);
 
+    /* Start processing the possible replies from the RPC server */
     bool keep_replying = false;
     do {
         /* Wait for the reply from the client - this might take up to 10 seconds */
         csp_packet_t *reply = csp_read(me->conn, 10000);
         if (reply) {
-            const rpc_procedure_t *rpc = lookup_procedure_from_id(prg, procedure);
             rpc_msg_t *msg = (rpc_msg_t *)reply->data;
+            if (msg->type != RPC_MSG_REPLY) {
+                /* We discard any other thing than REPLY messages here */
+                continue;
+            }
+            const rpc_procedure_t *rpc = lookup_procedure_from_id(prg, procedure);
             uint16_t data_len = be16toh(msg->reply.data_len);
             uint32_t amount = be32toh(msg->reply.amount);
             uint32_t idx = be32toh(msg->reply.idx);
 
-            if (idx < amount) {
-                /* There are still more to come */
-                keep_replying = true;
-            }
+            /* There are still more to come */
+            keep_replying = (idx < amount) ? true : false;
 
             RPC_DBG("RPC-C: rpc_reply: (%" PRIu32 " of %" PRIu32 ") data_len=%"PRId16", data=%p\n", idx, amount, data_len, &msg->reply.data[0]);
 
             if (rpc) {
                 va_list __args;
+                /* Grab a copy of the argument list */
                 va_copy(__args, args);
                 rpc_unpack(&msg->reply.data[0], data_len, rpc->res_fmt, __args);
                 va_end(__args);
-                if (cb) {
+                if (multires_cb) {
+                    /* Grab a copy of the argument list */
                     va_copy(__args, args);
-                    (*cb)(procedure, __args);
+                    (*multires_cb)(procedure, __args);
                     va_end(__args);
                 }
             }
@@ -701,6 +707,10 @@ static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet) {
                         reply->length += be16toh(reply_msg->reply.data_len);
                         RPC_DBG("RPC-S: rpc_msg_reply: data_len=%"PRId16"\n", be16toh(reply_msg->reply.data_len));
                     }
+
+                    RPC_DBG("RPC-S: Send reply\n");
+                    csp_send(me->conn, reply);
+                    reply = NULL;
                 }
             } while (more);
         }
@@ -1031,7 +1041,6 @@ int rpc_fetch_all(uint16_t node, rpc_fetch_result_t *result, void (*result_cb)(u
 typedef struct rpc_prg_data_s {
     const rpc_program_t *iter_prg;
     const rpc_procedure_t *iter_proc;
-    uint32_t state;
     uint32_t current_procedure;
     int32_t nof_procedures;
 } rpc_prg_data_t;
@@ -1058,6 +1067,71 @@ static void rpc_fetch_result_push(rpc_server_t *me, rpc_msg_t *reply, const rpc_
     }
 }
 
+static uint32_t count_number_of_procedures(void) {
+
+    extern const rpc_program_t __start_rpc_programs;
+    extern const rpc_program_t __stop_rpc_programs;
+    uint32_t nof_procedures = 0;
+
+    /* Count the total number of procedures */
+    const rpc_program_t *iter_prg = &__start_rpc_programs;
+    while (iter_prg < &__stop_rpc_programs) {
+        const rpc_procedure_t *iter_proc = iter_prg->procedures;
+        while (iter_proc && iter_proc->id != 0xFFFFFFFFUL) {
+            nof_procedures++;
+            iter_proc++;
+        }
+        iter_prg++;
+    }
+
+    return nof_procedures;
+}
+
+static bool find_first_procedure(rpc_prg_data_t *data) {
+    
+    extern const rpc_program_t __start_rpc_programs;
+    extern const rpc_program_t __stop_rpc_programs;
+    bool found = false;
+
+    data->iter_prg = &__start_rpc_programs;
+    while (data->iter_prg < &__stop_rpc_programs) {
+        data->iter_proc = data->iter_prg->procedures;
+        if (data->iter_proc && data->iter_proc->id != 0xFFFFFFFFUL) {
+            found = true;
+            break;
+        }
+        data->iter_prg++;
+    }
+
+    return found;
+}
+
+static bool find_next_procedure(rpc_prg_data_t *data) {
+
+    extern const rpc_program_t __start_rpc_programs;
+    extern const rpc_program_t __stop_rpc_programs;
+    bool found = false;
+
+    /* Advance to the next procedure in the list */
+    data->iter_proc++;
+    if (data->iter_proc->id != 0xFFFFFFFFUL) {
+        found = true;
+    } else {
+        /* Advance the program iterator until we find a valid procedure */
+        data->iter_prg++;
+        while (data->iter_prg < &__stop_rpc_programs) {
+            data->iter_proc = data->iter_prg->procedures;
+            if (data->iter_proc && data->iter_proc->id != 0xFFFFFFFFUL) {
+                found = true;
+                break;
+            }
+            data->iter_prg++;
+        }
+    }
+
+    return found;
+}
+
 static bool rpc_program_handler(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply, void *data) {
 
     extern const rpc_program_t __start_rpc_programs;
@@ -1071,102 +1145,42 @@ static bool rpc_program_handler(rpc_server_t *me, uint32_t program, uint32_t pro
         {
             RPC_DBG("RPC: rpc_fetch_first()\n");
 
-            /* Unconditionally reset the iterators in the get first operation */
-            prg_data->iter_prg = NULL;
-            prg_data->iter_proc = NULL;
-
-            /* Verify that we have programs at all */
-            if (&__stop_rpc_programs > &__start_rpc_programs) {
-                /* Setup initial iterator */
-                prg_data->iter_prg = &__start_rpc_programs;
-                prg_data->iter_proc = prg_data->iter_prg->procedures;
-                /* Check to see if the procedure list is empty */
-                if (!prg_data->iter_proc || prg_data->iter_proc->id == 0xFFFFFFFFUL) {
-                    /* The end termination of the procedure list */
-                    rpc_fetch_result_push(me, reply,  NULL, NULL);
-                } else {
-                    /* Valid program and procedure list */
-                    rpc_fetch_result_push(me, reply,  prg_data->iter_prg, prg_data->iter_proc);
-                    /* Advance the procedure iterator */
-                    prg_data->iter_proc++;
-                }
+            if (find_first_procedure(prg_data)) {
+                /* Valid program and procedure list */
+                rpc_fetch_result_push(me, reply, prg_data->iter_prg, prg_data->iter_proc);
             } else {
                 /* The program list is empty */
-                rpc_fetch_result_push(me, reply,  NULL, NULL);
+                rpc_fetch_result_push(me, reply, NULL, NULL);
             }
         }
         break;
         case RPC_PROCEDURE_FETCH_NEXT:
         {
             RPC_DBG("RPC: rpc_fetch_next()\n");
-            bool last = true;
 
-            /* Have we reached the end of programs list */
-            if (prg_data->iter_prg) {
-                /* If not, then we might have more procedures */
-                if (!prg_data->iter_proc || prg_data->iter_proc->id == 0xFFFFFFFFUL) {
-                    /* Advance the program iterator */
-                    prg_data->iter_prg++;
-                    /* Verify that we are within the bounds */
-                    if (prg_data->iter_prg < &__stop_rpc_programs) {
-                        /* Restart the procedure iterator */
-                        prg_data->iter_proc = prg_data->iter_prg->procedures;
-                    } else {
-                        prg_data->iter_prg = NULL;
-                        prg_data->iter_proc = NULL;
-                    }
-                }
-
-                if (prg_data->iter_prg && prg_data->iter_proc && prg_data->iter_proc->id != 0xFFFFFFFFUL) {
-                    /* Valid program and procedure list */
-                    rpc_fetch_result_push(me, reply,  prg_data->iter_prg, prg_data->iter_proc);
-                    /* Advance the procedure iterator */
-                    prg_data->iter_proc++;
-                    last = false;
-                }
-            }
-
-            if (last) {
-                rpc_fetch_result_push(me, reply,  NULL, NULL);
+            if (find_next_procedure(prg_data)) {
+                /* Valid program and procedure list */
+                rpc_fetch_result_push(me, reply, prg_data->iter_prg, prg_data->iter_proc);
+            } else {
+                /* The program list is empty */
+                rpc_fetch_result_push(me, reply, NULL, NULL);
             }
         }
         break;
         case RPC_PROCEDURE_FETCH_ALL:
         {
+            RPC_DBG("RPC: rpc_fetch_all()\n");
+
             /* This can be executed multiple times during an RPC request from a client */
             if (prg_data->nof_procedures < 0) {
                 /* Initially, start by counting the total amount of procedures */
-                prg_data->nof_procedures = 0;
                 prg_data->current_procedure = 0;
-                /* Count the total number of procedures */
-                const rpc_program_t *iter_prg = &__start_rpc_programs;
-                while (iter_prg < &__stop_rpc_programs) {
-                    const rpc_procedure_t *iter_proc = iter_prg->procedures;
-                    while (iter_proc && iter_proc->id != 0xFFFFFFFFUL) {
-                        prg_data->nof_procedures++;
-                        iter_proc++;
-                    }
-                    iter_prg++;
-                }
-
+                prg_data->nof_procedures = count_number_of_procedures();
                 /* Setup initial iterator */
-                prg_data->iter_prg = &__start_rpc_programs;
-                prg_data->iter_proc = prg_data->iter_prg->procedures;
+                find_first_procedure(prg_data);
             } else {
-                /* Advance the iterators */
-                if (prg_data->iter_proc->id != 0xFFFFFFFFUL) {
-                    /* Advance the procedure iterator */
-                    prg_data->iter_proc++;
-                } else {
-                    prg_data->iter_proc = NULL;
-                    /* Advance the program iterator */
-                    prg_data->iter_prg++;
-                    if (prg_data->iter_prg < &__stop_rpc_programs) {
-                        prg_data->iter_proc = prg_data->iter_prg->procedures;
-                    } else {
-                        prg_data->iter_prg = NULL;
-                    }
-                }
+                /* Find the next valid procedure */
+                find_next_procedure(prg_data);
             }
 
             /* Setup the reply header information regarding the number of replys */
@@ -1194,7 +1208,6 @@ static bool rpc_program_handler(rpc_server_t *me, uint32_t program, uint32_t pro
 static rpc_prg_data_t g_prg_data = {
     .iter_prg = NULL,
     .iter_proc = NULL,
-    .state = 0,
     .nof_procedures = -1,
 };
 
