@@ -2,6 +2,7 @@
 
 #include <inttypes.h>
 #include <sys/queue.h>
+#include <stdarg.h>
 
 #include <csp/csp.h>
 
@@ -39,6 +40,7 @@ extern "C" {
 typedef enum rpc_program_procedures_e {
     RPC_PROCEDURE_FETCH_FIRST = 0,
     RPC_PROCEDURE_FETCH_NEXT = 1,
+    RPC_PROCEDURE_FETCH_ALL = 2,
 } rpc_program_procedures_t;
 
 typedef struct rpc_fetch_result_s {
@@ -171,8 +173,9 @@ typedef struct rpc_server_s rpc_server_t;
  * @param call Pointer to the rpc_msg_t packet containing the call request being processed
  * @param reply Pointer to a rpc_msg_t packet which will receive the procedure return objects
  * @param ctx Call back context pointer, which will be passed along
+ * @return true: call me again, false: done
  */
-typedef void rpc_server_callback_t(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply, void *ctx);
+typedef bool rpc_server_callback_t(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply, void *ctx);
 
 SLIST_HEAD( rpc_program_list_s, rpc_program_s );
 typedef struct rpc_program_list_s rpc_program_list_t;
@@ -251,6 +254,7 @@ extern bool rpc_waitfor_connections(rpc_server_t *me);
 extern bool rpc_handle_connection(rpc_server_t *me);
 
 /* Server side call handler methods */
+extern void rpc_set_reply_header(rpc_reply_t *reply, uint32_t amount, uint32_t idx);
 extern int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...);
 extern void rpc_result_push_uint8(rpc_server_t *me, uint8_t value, rpc_msg_t *msg);
 extern void rpc_result_push_int8(rpc_server_t *me, int8_t value, rpc_msg_t *msg);
@@ -268,6 +272,7 @@ extern void rpc_result_push_buffer(rpc_server_t *me, const uint8_t *value, uint1
 /* RPC client program procedures */
 extern int rpc_fetch_first(uint16_t node, rpc_fetch_result_t *result);
 extern int rpc_fetch_next(uint16_t node, rpc_fetch_result_t *result);
+extern int rpc_fetch_all(uint16_t node, rpc_fetch_result_t *result, void (*result_cb)(uint32_t index, va_list args));
 
 #ifdef __cplusplus
 }
