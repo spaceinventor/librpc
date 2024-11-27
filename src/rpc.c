@@ -584,8 +584,12 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     va_list args;
     va_start(args, procedure);
 
-    /* Grab any possible call back to use if multiple replies comes along */
-    void (*multires_cb)(uint32_t, va_list) = (void (*)(uint32_t, va_list))va_arg(args, void *);
+    /* Grab any possible call back and its context to use if multiple replies comes along */
+    void (*multires_cb)(uint32_t, void *, va_list) = (void (*)(uint32_t, void *, va_list))va_arg(args, void *);
+    void *multires_cb_ctx = NULL;
+    if (multires_cb) {
+        multires_cb_ctx = (void *)va_arg(args, void *);
+    }
 
     /* Find the associated program object */
     const rpc_program_t *prg = lookup_program_from_id(&me->module, program);
@@ -639,7 +643,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
                 if (multires_cb) {
                     /* Grab a copy of the argument list */
                     va_copy(__args, args);
-                    (*multires_cb)(procedure, __args);
+                    (*multires_cb)(procedure, multires_cb_ctx, __args);
                     va_end(__args);
                 }
             }
@@ -1009,7 +1013,7 @@ int rpc_fetch_next(uint16_t node, rpc_fetch_result_t *result) {
     return res;
 }
 
-int rpc_fetch_all(uint16_t node, rpc_fetch_result_t *result, void (*result_cb)(uint32_t index, va_list args)) {
+int rpc_fetch_all(uint16_t node, rpc_fetch_result_t *result, void (*result_cb)(uint32_t, void *, va_list), void *ctx) {
 
     int res = -1;
 
@@ -1017,7 +1021,7 @@ int rpc_fetch_all(uint16_t node, rpc_fetch_result_t *result, void (*result_cb)(u
     if (!res) {
         res = rpc_call_invoke(global_rpc_client, RPC_PROGRAM_RPC, RPC_PROCEDURE_FETCH_ALL,
             /* CALLBACK */
-                result_cb,
+                result_cb, ctx,
             /*ARGS*/
                 /*void*/
             /*RETURN*/
