@@ -272,7 +272,7 @@ extern void rpc_result_push_buffer(rpc_server_t *me, const uint8_t *value, uint1
 /* RPC client program procedures */
 extern int rpc_fetch_first(uint16_t node, rpc_fetch_result_t *result);
 extern int rpc_fetch_next(uint16_t node, rpc_fetch_result_t *result);
-extern int rpc_fetch_all(uint16_t node, rpc_fetch_result_t *result, void (*result_cb)(uint32_t index, va_list args));
+extern int rpc_fetch_all(uint16_t node, rpc_fetch_result_t *result, void (*result_cb)(uint32_t, void *, va_list), void *ctx);
 
 #ifdef __cplusplus
 }
