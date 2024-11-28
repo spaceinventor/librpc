@@ -554,6 +554,7 @@ int rpc_disconnect(rpc_client_t *me) {
 
 int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
 
+    int res = -1;
     /* Lookup the RPC program and there after the procedure format */
     const rpc_program_t *program = lookup_program_from_id(&me->module, be32toh(msg->call.program));
     const rpc_procedure_t *rpc = lookup_procedure_from_id(program, be32toh(msg->call.procedure));
@@ -562,13 +563,12 @@ int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
     if (rpc) {
         va_list(args);
         va_start(args, msg);
-
         rpc_unpack(&msg->call.data[0], data_len, rpc->arg_fmt, args);
-
         va_end(args);
+        res = 0;
     }
 
-    return 0;
+    return res;
 }
 
 int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...) {
