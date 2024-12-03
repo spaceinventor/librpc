@@ -693,11 +693,10 @@ static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet) {
     switch (req_msg->type) {
         case RPC_MSG_CALL:
         {
-            uint16_t data_len = be16toh(req_msg->call.data_len);
             uint32_t program = be32toh(req_msg->call.program);
             uint32_t procedure = be32toh(req_msg->call.procedure);
 
-            RPC_DBG("RPC-S: rpc_msg_call: data_len=%"PRId16",program=0x%"PRIX32",procedure=%"PRIu32"\n", data_len, program, procedure);
+            RPC_DBG("RPC-S: rpc_msg_call: data_len=%"PRId16",program=0x%"PRIX32",procedure=%"PRIu32"\n", be16toh(req_msg->call.data_len), program, procedure);
 
             bool more = false;
             do {
@@ -922,10 +921,7 @@ bool rpc_waitfor_connections(rpc_server_t *me) {
         return false;
     }
 
-    uint16_t src = csp_conn_src(me->conn);
-    uint16_t sport = csp_conn_sport(me->conn);
-
-    RPC_DBG("RPC-S: Incoming connection from: %"PRIu16":%"PRIu16"\n", src, sport);
+    RPC_DBG("RPC-S: Incoming connection from: %"PRIu16":%"PRIu16"\n", csp_conn_src(me->conn), csp_conn_sport(me->conn));
 
     return true;
 }
