@@ -45,5 +45,3 @@ if doxygen.found()
                               command: [doxygen, doxyfile],
                               build_by_default: false)
 endif
-
-#rpc_dep = declare_dependency(include_directories : include, link_with : rpc_lib, dependencies: rpc_lib_dep).as_link_whole()
