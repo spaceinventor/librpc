@@ -533,12 +533,12 @@ int rpc_connect(rpc_client_t *me, uint16_t node) {
         me->conn = csp_connect(CSP_PRIO_HIGH, node, CSP_PORT_RPC_SERVER, 0, CSP_O_NONE);
         if (me->conn == NULL) {
             RPC_DBG("RPC-C: Could not connect to RPC service\n");
-            return -1;
+            return RPC_STATUS_ERR_COULD_NOT_CONNECT;
         }
         RPC_DBG("RPC-C: Connected to service\n");
     }
 
-    return 0;
+    return RPC_STATUS_OK;
 }
 
 int rpc_disconnect(rpc_client_t *me) {
@@ -549,12 +549,12 @@ int rpc_disconnect(rpc_client_t *me) {
         me->conn = NULL;
     }
 
-    return 0;
+    return RPC_STATUS_OK;
 }
 
 int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
 
-    int res = -1;
+    int res = RPC_STATUS_ERR_NOT_FOUND;
     /* Lookup the RPC program and there after the procedure format */
     const rpc_program_t *program = lookup_program_from_id(&me->module, be32toh(msg->call.program));
     const rpc_procedure_t *rpc = lookup_procedure_from_id(program, be32toh(msg->call.procedure));
@@ -565,7 +565,7 @@ int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
         va_start(args, msg);
         rpc_unpack(&msg->call.data[0], data_len, rpc->arg_fmt, args);
         va_end(args);
-        res = 0;
+        res = RPC_STATUS_OK;
     }
 
     return res;
@@ -577,7 +577,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     csp_packet_t *request = csp_buffer_get(0);
     if (!request) {
         RPC_ERR("RPC-C: Could not get CSP buffer\n");
-        return -1;
+        return RPC_STATUS_ERR_NO_MEMORY;
     }
 
     /* Setup the argument list */
@@ -596,7 +596,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     if (!prg) {
         RPC_ERR("RPC-C: Error, could not find program: 0x%08"PRIX32"\n", program);
         csp_buffer_free(request);
-        return -1;
+        return RPC_STATUS_ERR_NOT_FOUND;
     }
 
     /* Create the RPC call protocol message to send to the RPC server */
@@ -617,7 +617,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     bool keep_replying = false;
     do {
         /* Wait for the reply from the client - this might take up to 10 seconds */
-        csp_packet_t *reply = csp_read(me->conn, 10000);
+        csp_packet_t *reply = csp_read(me->conn, me->timeout);
         if (reply) {
             rpc_msg_t *msg = (rpc_msg_t *)reply->data;
             if (msg->type != RPC_MSG_REPLY) {
@@ -652,13 +652,13 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
             csp_buffer_free(reply);
         } else {
             RPC_DBG("RPC-C: Timeout waiting for reply\n");
-            return -1;
+            return RPC_STATUS_ERR_TIMEOUT;
         }
     } while (keep_replying);
 
     va_end(args);
 
-    return 0;
+    return RPC_STATUS_OK;
 }
 
 static csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg) {
@@ -862,7 +862,7 @@ int rpc_init_client(rpc_client_t *me, uint32_t nof_programs, rpc_program_t *prog
 
     me->conn = NULL;
 
-    return 0;
+    return RPC_STATUS_OK;
 }
 
 int rpc_start_server(rpc_server_t *me) {
@@ -886,18 +886,17 @@ int rpc_start_server(rpc_server_t *me) {
     me->sock.opts = CSP_O_NONE;
     res = csp_bind(&me->sock, CSP_PORT_RPC_SERVER);
     if (res != CSP_ERR_NONE) {
-        return -1;
+        if (res == CSP_ERR_INVAL) return RPC_STATUS_ERR_INVALID;
+        else if (res == CSP_ERR_USED) return RPC_STATUS_ERR_INUSE;
+        else return RPC_STATUS_ERR_INVALID;
     }
 
     /* Create a backlog of 1 connection */
-    res = csp_listen(&me->sock, 1);
-    if (res != CSP_ERR_NONE) {
-        return -1;
-    }
+    csp_listen(&me->sock, 1);
 
     global_rpc_server = me;
 
-    return 0;
+    return RPC_STATUS_OK;
 }
 
 int rpc_stop_server(rpc_server_t *me) {
@@ -907,15 +906,15 @@ int rpc_stop_server(rpc_server_t *me) {
     /* Close the CSP socket */
     res = csp_socket_close(&me->sock);
     if (res != CSP_ERR_NONE) {
-        return -1;
+        return RPC_STATUS_ERR_INVALID;
     }
 
-    return 0;
+    return RPC_STATUS_OK;
 }
 
 bool rpc_waitfor_connections(rpc_server_t *me) {
 
-    if ((me->conn = csp_accept(&me->sock, 10000)) == NULL)
+    if ((me->conn = csp_accept(&me->sock, me->conn_timeout)) == NULL)
     {
         /* timeout */
         return false;
@@ -928,8 +927,8 @@ bool rpc_waitfor_connections(rpc_server_t *me) {
 
 bool rpc_handle_connection(rpc_server_t *me) {
 
-    /* Read request packets on connection, timeout is 10 s */
-    csp_packet_t *request = csp_read(me->conn, 100000);
+    /* Read request packets on connection */
+    csp_packet_t *request = csp_read(me->conn, me->timeout);
     if (NULL == request) {
         /* The connection is lost, tell the caller */
         RPC_DBG("RPC-S: Client disconnected or timeout.\n");
@@ -954,7 +953,7 @@ bool rpc_handle_connection(rpc_server_t *me) {
 
 int rpc_fetch_first(uint16_t node, rpc_fetch_result_t *result) {
 
-    int res = -1;
+    int res;;
 
     res = rpc_connect(global_rpc_client, node);
     if (!res) {
@@ -983,7 +982,7 @@ int rpc_fetch_first(uint16_t node, rpc_fetch_result_t *result) {
 
 int rpc_fetch_next(uint16_t node, rpc_fetch_result_t *result) {
 
-    int res = -1;
+    int res;
 
     res = rpc_connect(global_rpc_client, node);
     if (!res) {
@@ -1012,7 +1011,7 @@ int rpc_fetch_next(uint16_t node, rpc_fetch_result_t *result) {
 
 int rpc_fetch_all(uint16_t node, rpc_fetch_result_t *result, void (*result_cb)(uint32_t, void *, va_list), void *ctx) {
 
-    int res = -1;
+    int res;
 
     res = rpc_connect(global_rpc_client, node);
     if (!res) {

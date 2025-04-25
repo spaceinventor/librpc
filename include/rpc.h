@@ -33,6 +33,15 @@ extern "C" {
  */
 #define RPC_PROGRAM_RPC 0xFFFFFFFF
 
+#define RPC_STATUS_OK 0
+#define RPC_STATUS_ERR_COULD_NOT_CONNECT -1
+#define RPC_STATUS_ERR_TIMEOUT -2
+#define RPC_STATUS_ERR_NO_MEMORY -3
+#define RPC_STATUS_ERR_INVALID -4
+#define RPC_STATUS_ERR_NOT_FOUND -5
+#define RPC_STATUS_ERR_NOT_SUPPORTED -6
+#define RPC_STATUS_ERR_INUSE -7
+
 /**
  * @brief RPC program procedure ID list
  * 
@@ -241,6 +250,7 @@ typedef struct rpc_module_s {
 
 typedef struct client_s {
     csp_conn_t *conn;
+    uint32_t timeout;
     rpc_module_t module;
     /* Free lists */
     rpc_program_list_t program_slot;
@@ -249,6 +259,8 @@ typedef struct client_s {
 
 typedef struct rpc_server_s {
     csp_conn_t *conn;
+    uint32_t conn_timeout;
+    uint32_t timeout;
     csp_socket_t sock;
     rpc_module_t module;
     uint8_t spad_buffer[2000];
