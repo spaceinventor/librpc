@@ -19,7 +19,10 @@ Acronyms & Definitions
     - **Bat**\ tery
   * - CAN
     - **C**\ ontroller **A**\ rea **N**\ etwork
-  * - CSH_
+
+      .. _CSH:
+
+  * - CSH
     - **C**\ SP **Sh**\ ell
   * - CSP
     - **C**\ ubesat **S**\ pace **P**\ rotocol

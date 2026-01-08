@@ -1,6 +1,6 @@
 RPC
 =======
-The RPC (aka **R**emote **P**rocedure **C**all) library implements a simple, yet powerfull, RPC mechanism to be used on-top of i.e. CSP.
+The RPC (aka **R**\ emote **P**\ rocedure **C**\ all) library implements a simple, yet powerfull, RPC mechanism to be used on-top of i.e. CSP.
 
 Features
 --------
