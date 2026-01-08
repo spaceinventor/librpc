@@ -3,6 +3,7 @@ project('rpc', 'c', version: '0.0.1')
 include = include_directories('include')
 
 subdir('src')
+install_headers('include/rpc.h')
 
 gen_doc = find_program('gen-sidoc', required: false)
 
