@@ -108,7 +108,9 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         value.flt = (float)va_arg(*args, double);
                         RPC_DBG("PACK: float > %f\n", value.flt);
                         value.u32 = htobe32(value.u32);
-                        memcpy(&(call->data[data_len]), &value, sizeof(float));
+                        if ((data_len + sizeof(float)) <= call->data_len) {
+                            memcpy(&(call->data[data_len]), &value, sizeof(float));
+                        }
                         data_len += sizeof(float);
                     }
                     break;
@@ -118,7 +120,9 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         value.dbl = (double)va_arg(*args, double);
                         RPC_DBG("PACK: double > %f\n", value.dbl);
                         value.u64 = htobe64(value.u64);
-                        memcpy(&(call->data[data_len]), &value, sizeof(double));
+                        if ((data_len + sizeof(double)) <= call->data_len) {
+                            memcpy(&(call->data[data_len]), &value, sizeof(double));
+                        }
                         data_len += sizeof(double);
                     }
                     break;
@@ -126,14 +130,18 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                     {
                         int8_t value = (int8_t)va_arg(*args, int);
                         RPC_DBG("PACK: int8_t -> %"PRIi8"\n", value);
-                        memcpy(&(call->data[data_len]), &value, sizeof(int8_t));
+                        if ((data_len + sizeof(int8_t)) <= call->data_len) {
+                            memcpy(&(call->data[data_len]), &value, sizeof(int8_t));
+                        }
                         data_len += sizeof(int8_t);
                     } break;
                     case 'B':
                     {
                         uint8_t value = (uint8_t)va_arg(*args, int);
                         RPC_DBG("PACK: uint8_t -> %"PRIu8"\n", value);
-                        memcpy(&(call->data[data_len]), &value, sizeof(uint8_t));
+                        if ((data_len + sizeof(uint8_t)) <= call->data_len) {
+                            memcpy(&(call->data[data_len]), &value, sizeof(uint8_t));
+                        }
                         data_len += sizeof(uint8_t);
                     } break;
                     case 'h':
@@ -141,7 +149,9 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         int16_t value = (int16_t)va_arg(*args, int);
                         RPC_DBG("PACK: int16_t -> %"PRIi16"\n", value);
                         value = htobe16(value);
-                        memcpy(&(call->data[data_len]), &value, sizeof(int16_t));
+                        if ((data_len + sizeof(int16_t)) <= call->data_len) {
+                            memcpy(&(call->data[data_len]), &value, sizeof(int16_t));
+                        }
                         data_len += sizeof(int16_t);
                     } break;
                     case 'H':
@@ -149,7 +159,9 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         uint16_t value = (uint16_t)va_arg(*args, int);
                         RPC_DBG("PACK: uint16_t -> %"PRIu16"\n", value);
                         value = htobe16(value);
-                        memcpy(&(call->data[data_len]), &value, sizeof(uint16_t));
+                        if ((data_len + sizeof(uint16_t)) <= call->data_len) {
+                            memcpy(&(call->data[data_len]), &value, sizeof(uint16_t));
+                        }
                         data_len += sizeof(uint16_t);
                     } break;
                     case 'l':
@@ -157,7 +169,9 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         int32_t value = (int32_t)va_arg(*args, int32_t);
                         RPC_DBG("PACK: int32_t -> %"PRIi32"\n", value);
                         value = htobe32(value);
-                        memcpy(&(call->data[data_len]), &value, sizeof(int32_t));
+                        if ((data_len + sizeof(int32_t)) <= call->data_len) {
+                            memcpy(&(call->data[data_len]), &value, sizeof(int32_t));
+                        }
                         data_len += sizeof(int32_t);
                     } break;
                     case 'L':
@@ -165,7 +179,9 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         uint32_t value = (uint32_t)va_arg(*args, uint32_t);
                         RPC_DBG("PACK: uint32_t -> %"PRIu32"\n", value);
                         value = htobe32(value);
-                        memcpy(&(call->data[data_len]), &value, sizeof(uint32_t));
+                        if ((data_len + sizeof(uint32_t)) <= call->data_len) {
+                            memcpy(&(call->data[data_len]), &value, sizeof(uint32_t));
+                        }
                         data_len += sizeof(uint32_t);
                     } break;
                     case 'q':
@@ -173,7 +189,9 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         int64_t value = (int64_t)va_arg(*args, int64_t);
                         RPC_DBG("PACK: int64_t -> %"PRIi64"\n", value);
                         value = htobe64(value);
-                        memcpy(&(call->data[data_len]), &value, sizeof(int64_t));
+                        if ((data_len + sizeof(int64_t)) <= call->data_len) {
+                            memcpy(&(call->data[data_len]), &value, sizeof(int64_t));
+                        }
                         data_len += sizeof(int64_t);
                     } break;
                     case 'Q':
@@ -181,7 +199,9 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         uint64_t value = (uint64_t)va_arg(*args, uint64_t);
                         RPC_DBG("PACK: uint64_t -> %"PRIu64"\n", value);
                         value = htobe64(value);
-                        memcpy(&(call->data[data_len]), &value, sizeof(uint64_t));
+                        if ((data_len + sizeof(uint64_t)) <= call->data_len) {
+                            memcpy(&(call->data[data_len]), &value, sizeof(uint64_t));
+                        }
                         data_len += sizeof(uint64_t);
                     } break;
                     case 's':
@@ -189,7 +209,9 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         const char *value = (const char *)va_arg(*args, const char *);
                         RPC_DBG("PACK: string -> '%s'\n", value);
                         size_t size = strlen(value) + 1;
-                        memcpy(&(call->data[data_len]), value, size);
+                        if ((data_len + size) <= call->data_len) {
+                            memcpy(&(call->data[data_len]), value, size);
+                        }
                         data_len += size;
                     } break;
                     case 'p':
@@ -198,13 +220,17 @@ static uint16_t rpc_pack_call_request(const rpc_program_t *prg, rpc_call_t *call
                         uint16_t bytes_len = (uint16_t)va_arg(*args, unsigned int);
                         const char *bytes = (const char *)va_arg(*args, const char *);
                         RPC_DBG("PACK: data[%"PRIu16"] -> ...\n", bytes_len);
-                        /* Write the data buffer length into the packet */
                         rpc_data_type_t value;
                         value.u16 = htobe16(bytes_len);
-                        memcpy(&(call->data[data_len]), &value, sizeof(value.u16));
+                        if ((data_len + sizeof(value.u16)) <= call->data_len) {
+                            /* Write the data buffer length into the packet */
+                            memcpy(&(call->data[data_len]), &value, sizeof(value.u16));
+                        }
                         data_len += sizeof(value.u16);
-                        /* Write the actual data buffer content into the packet */
-                        memcpy(&(call->data[data_len]), bytes, bytes_len);
+                        if ((data_len + bytes_len) <= call->data_len) {
+                            /* Write the actual data buffer content into the packet */
+                            memcpy(&(call->data[data_len]), bytes, bytes_len);
+                        }
                         data_len += bytes_len;
                     }
                     break;
@@ -604,11 +630,17 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     req_msg->type = RPC_MSG_CALL;
     req_msg->version = RPC_VERSION;
     req_msg->xid = htobe32(0x12341234); /* TODO: We need to have a sequence number at this place */
-    req_msg->call.data_len = 0;
+    request->length = sizeof(req_msg->type) + sizeof(req_msg->version) + sizeof(req_msg->xid);
+    req_msg->call.data_len = (CSP_BUFFER_SIZE - (request->length + sizeof(req_msg->call))); /* Indicate the maximum data to be contained in the call */
     req_msg->call.program = htobe32(program);
     req_msg->call.procedure = htobe32(procedure);
-    request->length = sizeof(req_msg->type) + sizeof(req_msg->version) + sizeof(req_msg->xid);
     request->length += rpc_pack_call_request(prg, &req_msg->call, &args);
+    if (request->length > CSP_BUFFER_SIZE) {
+        /* We do not have room for the data in the request, so bail out */
+        RPC_ERR("RPC-C: Error, argument size too big: %"PRIu32" (max allowed: %"PRIu32")\n", request->length, CSP_BUFFER_SIZE);
+        csp_buffer_free(request);
+        return RPC_STATUS_ERR_INVALID;
+    }
 
     /* Send the RPC call to the RPC server */
     csp_send(me->conn, request);
