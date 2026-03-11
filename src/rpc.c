@@ -1,6 +1,7 @@
 #include <endian.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <csp/csp.h>
 
