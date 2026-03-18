@@ -638,7 +638,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     request->length += rpc_pack_call_request(prg, &req_msg->call, &args);
     if (request->length > CSP_BUFFER_SIZE) {
         /* We do not have room for the data in the request, so bail out */
-        RPC_ERR("RPC-C: Error, argument size too big: %"PRIu32" (max allowed: %"PRIu32")\n", request->length, CSP_BUFFER_SIZE);
+        RPC_ERR("RPC-C: Error, argument size too big: %"PRIu16" (max allowed: %"PRIu16")\n", request->length, (uint16_t)CSP_BUFFER_SIZE);
         csp_buffer_free(request);
         return RPC_STATUS_ERR_INVALID;
     }
