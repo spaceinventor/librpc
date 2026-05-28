@@ -1,0 +1,6 @@
+*.vmem
+*.whl
+__pycache__
+*.egg-info
+dist/
+python/build

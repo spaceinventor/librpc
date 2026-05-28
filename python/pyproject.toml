@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["spaceinventor"]
+namespaces = true
+
+[project]
+name = "spaceinventor-rpc"
+version = "1.0.3"
+description = "SpaceInventor's RPC client"
+license = { text = "SpaceInventor" }

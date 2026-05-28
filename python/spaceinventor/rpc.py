@@ -227,7 +227,9 @@ class RpcClient:
         Fetch RPC meta-data from the server, including available programs and their procedures. This method establishes a connection to the RPC server, sends a request to retrieve the list of available procedures, 
         and processes the response to populate the client's program and procedure information.
         If successful, the `self` object will be updated with the available programs and their procedures, which can then be called directly from the client as attributes. 
-        The method returns `True` if the procedures were successfully fetched and processed, or `False` if there was an error during the process (e.g., connection issues, invalid responses).
+
+        Returns:
+            `True` if the procedures were successfully fetched and processed, or `False` if there was an error during the process (e.g., connection issues, invalid responses).
         """
         res = True
         rpc_port = self.settings.get("port", 9)
