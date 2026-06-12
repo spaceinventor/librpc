@@ -22,17 +22,6 @@ extern "C" {
  */
 #define CSP_PORT_RPC_SERVER 9
 
-/**
- * @brief The RPC program id for the RPC server
- * 
- * This program id is used exclusively by the RPC
- * server for its "program". The RPC server program
- * implements the supporting procedures for "talking"
- * to the RPC server on a particular client node.
- * 
- */
-#define RPC_PROGRAM_RPC 0xFFFFFFFF
-
 #define RPC_STATUS_OK 0
 #define RPC_STATUS_ERR_COULD_NOT_CONNECT -1
 #define RPC_STATUS_ERR_TIMEOUT -2
@@ -41,26 +30,6 @@ extern "C" {
 #define RPC_STATUS_ERR_NOT_FOUND -5
 #define RPC_STATUS_ERR_NOT_SUPPORTED -6
 #define RPC_STATUS_ERR_INUSE -7
-
-/**
- * @brief RPC program procedure ID list
- * 
- */
-typedef enum rpc_program_procedures_e {
-    RPC_PROCEDURE_FETCH_FIRST = 0,
-    RPC_PROCEDURE_FETCH_NEXT = 1,
-    RPC_PROCEDURE_FETCH_ALL = 2,
-} rpc_program_procedures_t;
-
-typedef struct rpc_fetch_result_s {
-    int32_t result;
-    uint32_t program_id;
-    char program_name[64];
-    uint32_t procedure_id;
-    char procedure_name[64];
-    char arg_fmt[64];
-    char res_fmt[64];
-} rpc_fetch_result_t;
 
 typedef enum rpc_msg_type_e {
     RPC_MSG_CALL = 0,
@@ -111,8 +80,6 @@ typedef struct rpc_procedure_s {
     const rpc_proc_arg_t *result;
     SLIST_ENTRY( rpc_procedure_s ) list;
 } rpc_procedure_t;
-
-#define RPC_PROCEDURE_NULL_INIT { .id = 0xFFFFFFFFUL, .name = "", .arg_fmt = "", .res_fmt = "", .args = NULL, .result = NULL }
 
 /**
  * @brief RPC call message type
@@ -184,7 +151,7 @@ typedef struct rpc_server_s rpc_server_t;
  * @param ctx Call back context pointer, which will be passed along
  * @return true: call me again, false: done
  */
-typedef bool rpc_server_callback_t(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply, void *ctx);
+typedef void rpc_server_callback_t(uint32_t procedure, rpc_msg_t *call);
 
 SLIST_HEAD( rpc_program_list_s, rpc_program_s );
 typedef struct rpc_program_list_s rpc_program_list_t;
@@ -227,7 +194,7 @@ typedef struct rpc_program_s {
  * @param _dATA Pointer to some contextual data which will be passed to the handler
  * 
  */
-#define RPC_DECLARE_PROGRAM(_nAME, _pROGRAMiD, _hANDLER, _pROCEDURES, _dATA) \
+#define RPC_DECLARE_PROGRAM(_nAME, _pROGRAMiD, _hANDLER) \
     static const \
         __attribute__((__aligned__(__alignof__(rpc_program_t)))) \
         rpc_program_t \
@@ -238,8 +205,6 @@ typedef struct rpc_program_s {
             .program_id = (_pROGRAMiD), \
             .remote = false, \
             .handler = _hANDLER, \
-            .procedures = _pROCEDURES, \
-            .data = _dATA, \
         };
 
 typedef struct rpc_module_s {
@@ -259,7 +224,6 @@ typedef struct client_s {
 
 typedef struct rpc_server_s {
     csp_conn_t *conn;
-    uint32_t conn_timeout;
     uint32_t timeout;
     csp_socket_t sock;
     rpc_module_t module;
@@ -283,27 +247,36 @@ extern int rpc_start_server(rpc_server_t *me);
 extern int rpc_stop_server(rpc_server_t *me);
 extern bool rpc_waitfor_connections(rpc_server_t *me);
 extern bool rpc_handle_connection(rpc_server_t *me);
+extern void rpc_server_main(rpc_server_t *me);
 
 /* Server side call handler methods */
+extern csp_packet_t * rpc_result_prepare(rpc_msg_t *msg);
 extern void rpc_set_reply_header(rpc_reply_t *reply, uint32_t amount, uint32_t idx);
-extern int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...);
-extern void rpc_result_push_uint8(rpc_server_t *me, uint8_t value, rpc_msg_t *msg);
-extern void rpc_result_push_int8(rpc_server_t *me, int8_t value, rpc_msg_t *msg);
-extern void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, rpc_msg_t *msg);
-extern void rpc_result_push_int16(rpc_server_t *me, int16_t value, rpc_msg_t *msg);
-extern void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, rpc_msg_t *msg);
-extern void rpc_result_push_int32(rpc_server_t *me, int32_t value, rpc_msg_t *msg);
-extern void rpc_result_push_uint64(rpc_server_t *me, uint64_t value, rpc_msg_t *msg);
-extern void rpc_result_push_int64(rpc_server_t *me, int64_t value, rpc_msg_t *msg);
-extern void rpc_result_push_float(rpc_server_t *me, float value, rpc_msg_t *msg);
-extern void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg);
-extern void rpc_result_push_string(rpc_server_t *me, const char *value, rpc_msg_t *msg);
-extern void rpc_result_push_buffer(rpc_server_t *me, const uint8_t *value, uint16_t len, rpc_msg_t *msg);
-
-/* RPC client program procedures */
-extern int rpc_fetch_first(uint16_t node, rpc_fetch_result_t *result);
-extern int rpc_fetch_next(uint16_t node, rpc_fetch_result_t *result);
-extern int rpc_fetch_all(uint16_t node, rpc_fetch_result_t *result, void (*result_cb)(uint32_t, void *, va_list), void *ctx);
+extern int rpc_call_deserialize(rpc_msg_t *msg, ...);
+extern uint8_t rpc_request_pop_uint8(rpc_msg_t *msg);
+extern int8_t rpc_request_pop_int8(rpc_msg_t *msg);
+extern uint16_t rpc_request_pop_uint16(rpc_msg_t *msg);
+extern int16_t rpc_request_pop_int16(rpc_msg_t *msg);
+extern uint32_t rpc_request_pop_uint32(rpc_msg_t *msg);
+extern int32_t rpc_request_pop_int32(rpc_msg_t *msg);
+extern uint64_t rpc_request_pop_uint64(rpc_msg_t *msg);
+extern int64_t rpc_request_pop_int64(rpc_msg_t *msg);
+extern float rpc_request_pop_float(rpc_msg_t *msg);
+extern double rpc_request_pop_double(rpc_msg_t *msg);
+extern void rpc_request_pop_string(char **value, rpc_msg_t *msg);
+extern void rpc_request_pop_buffer(uint8_t **value, uint16_t *len, rpc_msg_t *msg);
+extern void rpc_result_push_uint8(uint8_t value, rpc_msg_t *msg);
+extern void rpc_result_push_int8(int8_t value, rpc_msg_t *msg);
+extern void rpc_result_push_uint16(uint16_t value, rpc_msg_t *msg);
+extern void rpc_result_push_int16(int16_t value, rpc_msg_t *msg);
+extern void rpc_result_push_uint32(uint32_t value, rpc_msg_t *msg);
+extern void rpc_result_push_int32(int32_t value, rpc_msg_t *msg);
+extern void rpc_result_push_uint64(uint64_t value, rpc_msg_t *msg);
+extern void rpc_result_push_int64(int64_t value, rpc_msg_t *msg);
+extern void rpc_result_push_float(float value, rpc_msg_t *msg);
+extern void rpc_result_push_double(double value, rpc_msg_t *msg);
+extern void rpc_result_push_string(const char *value, rpc_msg_t *msg);
+extern void rpc_result_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg);
 
 #ifdef __cplusplus
 }

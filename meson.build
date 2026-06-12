@@ -6,6 +6,8 @@ subdir('src')
 
 gen_doc = find_program('gen-sidoc', required: false)
 
+gen_rpc_server = generator(find_program('python3'), arguments: ['./../lib/rpc/generate_rpc.py', '@INPUT@', '@BUILD_DIR@', 'server'], output: ['rpc_@BASENAME@_server.c', 'rpc_@BASENAME@_server.h', 'rpc_@BASENAME@.h'])
+
 if gen_doc.found()
   doc_out = meson.current_build_dir() / '@OUTPUT@'
   doc = custom_target('doc',

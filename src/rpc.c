@@ -387,7 +387,180 @@ static uint16_t rpc_unpack(uint8_t *data, uint16_t len, const char *fmt, va_list
     return offset;
 }
 
-void rpc_result_push_uint8(rpc_server_t *me, uint8_t value, rpc_msg_t *msg) {
+uint8_t rpc_request_pop_uint8(rpc_msg_t *msg) {
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    uint8_t value;
+    memcpy(&value, &call->data[data_len], sizeof(uint8_t));
+
+    data_len += sizeof(uint8_t);
+    call->data_len = htobe16(data_len);
+
+    return value;
+}
+
+int8_t rpc_request_pop_int8(rpc_msg_t *msg) {
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    int8_t value;
+    memcpy(&value, &call->data[data_len], sizeof(int8_t));
+
+    data_len += sizeof(int8_t);
+    call->data_len = htobe16(data_len);
+
+    return value;
+}
+
+uint16_t rpc_request_pop_uint16(rpc_msg_t *msg) {
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    uint16_t value;
+    memcpy(&value, &call->data[data_len], sizeof(uint16_t));
+    value = htobe16(value);
+
+    data_len += sizeof(uint16_t);
+    call->data_len = htobe16(data_len);
+
+    return value;
+}
+
+int16_t rpc_request_pop_int16(rpc_msg_t *msg) {
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    int16_t value;
+    memcpy(&value, &call->data[data_len], sizeof(int16_t));
+    value = htobe16(value);
+
+    data_len += sizeof(int16_t);
+    call->data_len = htobe16(data_len);
+
+    return value;
+}
+
+uint32_t rpc_request_pop_uint32(rpc_msg_t *msg) {
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    uint32_t value;
+    memcpy(&value, &call->data[data_len], sizeof(uint32_t));
+    value = htobe32(value);
+
+    data_len += sizeof(uint32_t);
+    call->data_len = htobe16(data_len);
+
+    return value;
+}
+
+int32_t rpc_request_pop_int32(rpc_msg_t *msg) {
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    int32_t value;
+    memcpy(&value, &call->data[data_len], sizeof(int32_t));
+    value = htobe32(value);
+
+    data_len += sizeof(int32_t);
+    call->data_len = htobe16(data_len);
+
+    return value;
+}
+
+uint64_t rpc_request_pop_uint64(rpc_msg_t *msg) {
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    uint64_t value;
+    memcpy(&value, &call->data[data_len], sizeof(uint64_t));
+    value = htobe64(value);
+
+    data_len += sizeof(uint64_t);
+    call->data_len = htobe16(data_len);
+
+    return value;
+}
+
+int64_t rpc_request_pop_int64(rpc_msg_t *msg) {
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    int64_t value;
+    memcpy(&value, &call->data[data_len], sizeof(int64_t));
+    value = htobe64(value);
+
+    data_len += sizeof(int64_t);
+    call->data_len = htobe16(data_len);
+
+    return value;
+}
+
+float rpc_request_pop_float(rpc_msg_t *msg) {
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    rpc_data_type_t v;
+    memcpy(&v.u32, &call->data[data_len], sizeof(float));
+    v.u32 = htobe32(v.u32);
+
+    data_len += sizeof(float);
+    call->data_len = htobe16(data_len);
+
+    return v.flt;
+}
+
+double rpc_request_pop_double(rpc_msg_t *msg) {
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    rpc_data_type_t v;
+    memcpy(&v.u64, &call->data[data_len], sizeof(double));
+    v.u64 = htobe64(v.u64);
+
+    data_len += sizeof(double);
+    call->data_len = htobe16(data_len);
+
+    return v.dbl;
+}
+
+void rpc_request_pop_string(char **value, rpc_msg_t *msg) {
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    size_t str_len = strlen((const char *)&call->data[data_len]);
+    strcpy(*value, (const char *)&call->data[data_len]);
+
+    data_len += str_len + 1;
+    call->data_len = htobe16(data_len);
+}
+
+void rpc_request_pop_buffer(uint8_t **value, uint16_t *len, rpc_msg_t *msg) {
+
+    *len = rpc_request_pop_uint16(msg);
+
+    rpc_call_t *call = &msg->call;
+    uint16_t data_len = be16toh(call->data_len);
+
+    memcpy((char *)*value, (const char *)&call->data[data_len], *len);
+
+    data_len += *len;
+    call->data_len = htobe16(data_len);
+}
+
+void rpc_result_push_uint8(uint8_t value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -399,7 +572,7 @@ void rpc_result_push_uint8(rpc_server_t *me, uint8_t value, rpc_msg_t *msg) {
     reply->data_len = htobe16(data_len);
 }
 
-void rpc_result_push_int8(rpc_server_t *me, int8_t value, rpc_msg_t *msg) {
+void rpc_result_push_int8(int8_t value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -412,7 +585,7 @@ void rpc_result_push_int8(rpc_server_t *me, int8_t value, rpc_msg_t *msg) {
 }
 
 
-void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, rpc_msg_t *msg) {
+void rpc_result_push_uint16(uint16_t value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -424,7 +597,7 @@ void rpc_result_push_uint16(rpc_server_t *me, uint16_t value, rpc_msg_t *msg) {
     reply->data_len = htobe16(data_len);
 }
 
-void rpc_result_push_int16(rpc_server_t *me, int16_t value, rpc_msg_t *msg) {
+void rpc_result_push_int16(int16_t value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -436,7 +609,7 @@ void rpc_result_push_int16(rpc_server_t *me, int16_t value, rpc_msg_t *msg) {
     reply->data_len = htobe16(data_len);
 }
 
-void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, rpc_msg_t *msg) {
+void rpc_result_push_uint32(uint32_t value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -448,7 +621,7 @@ void rpc_result_push_uint32(rpc_server_t *me, uint32_t value, rpc_msg_t *msg) {
     reply->data_len = htobe16(data_len);
 }
 
-void rpc_result_push_int32(rpc_server_t *me, int32_t value, rpc_msg_t *msg) {
+void rpc_result_push_int32(int32_t value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -460,7 +633,7 @@ void rpc_result_push_int32(rpc_server_t *me, int32_t value, rpc_msg_t *msg) {
     reply->data_len = htobe16(data_len);
 }
 
-void rpc_result_push_uint64(rpc_server_t *me, uint64_t value, rpc_msg_t *msg) {
+void rpc_result_push_uint64(uint64_t value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -472,7 +645,7 @@ void rpc_result_push_uint64(rpc_server_t *me, uint64_t value, rpc_msg_t *msg) {
     reply->data_len = htobe16(data_len);
 }
 
-void rpc_result_push_int64(rpc_server_t *me, int64_t value, rpc_msg_t *msg) {
+void rpc_result_push_int64(int64_t value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -484,7 +657,7 @@ void rpc_result_push_int64(rpc_server_t *me, int64_t value, rpc_msg_t *msg) {
     reply->data_len = htobe16(data_len);
 }
 
-void rpc_result_push_float(rpc_server_t *me, float value, rpc_msg_t *msg) {
+void rpc_result_push_float(float value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -498,7 +671,7 @@ void rpc_result_push_float(rpc_server_t *me, float value, rpc_msg_t *msg) {
     reply->data_len = htobe16(data_len);
 }
 
-void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg) {
+void rpc_result_push_double(double value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -512,7 +685,7 @@ void rpc_result_push_double(rpc_server_t *me, double value, rpc_msg_t *msg) {
     reply->data_len = htobe16(data_len);
 }
 
-void rpc_result_push_string(rpc_server_t *me, const char *value, rpc_msg_t *msg) {
+void rpc_result_push_string(const char *value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -531,7 +704,7 @@ void rpc_result_push_string(rpc_server_t *me, const char *value, rpc_msg_t *msg)
     reply->data_len = htobe16(data_len);
 }
 
-void rpc_result_push_buffer(rpc_server_t *me, const uint8_t *value, uint16_t len, rpc_msg_t *msg) {
+void rpc_result_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
     uint16_t data_len = be16toh(reply->data_len);
@@ -579,11 +752,11 @@ int rpc_disconnect(rpc_client_t *me) {
     return RPC_STATUS_OK;
 }
 
-int rpc_call_deserialize(rpc_server_t *me, rpc_msg_t *msg, ...) {
+int rpc_call_deserialize(rpc_msg_t *msg, ...) {
 
     int res = RPC_STATUS_ERR_NOT_FOUND;
     /* Lookup the RPC program and there after the procedure format */
-    const rpc_program_t *program = lookup_program_from_id(&me->module, be32toh(msg->call.program));
+    const rpc_program_t *program = lookup_program_from_id(&global_rpc_server->module, be32toh(msg->call.program));
     const rpc_procedure_t *rpc = lookup_procedure_from_id(program, be32toh(msg->call.procedure));
     uint16_t data_len = be16toh(msg->call.data_len);
 
@@ -694,7 +867,7 @@ int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...)
     return RPC_STATUS_OK;
 }
 
-static csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg) {
+csp_packet_t * rpc_result_prepare(rpc_msg_t *msg) {
 
     csp_packet_t *packet;
 
@@ -713,7 +886,7 @@ static csp_packet_t * rpc_result_prepare(rpc_server_t *me, rpc_msg_t *msg) {
     return packet;
 }
 
-static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet) {
+static csp_packet_t * rpc_handle_msg(csp_packet_t *packet) {
 
     rpc_msg_t *req_msg = (rpc_msg_t *)packet->data;
     csp_packet_t *reply = NULL;
@@ -731,25 +904,15 @@ static csp_packet_t * rpc_handle_msg(rpc_server_t *me, csp_packet_t *packet) {
 
             RPC_DBG("RPC-S: rpc_msg_call: data_len=%"PRId16",program=0x%"PRIX32",procedure=%"PRIu32"\n", be16toh(req_msg->call.data_len), program, procedure);
 
-            bool more = false;
-            do {
-                reply = rpc_result_prepare(me, req_msg);
-                if (reply) {
-                    /* Find a possibly matching program handler */
-                    const rpc_program_t *prg = lookup_program_from_id(&me->module, program);
-                    if (prg) {
-                        /* We found a match, call the associated handler */
-                        rpc_msg_t *reply_msg = (rpc_msg_t *)reply->data;
-                        more = (*prg->handler)(me, program, procedure, req_msg, reply_msg, prg->data);
-                        reply->length += be16toh(reply_msg->reply.data_len);
-                        RPC_DBG("RPC-S: rpc_msg_reply: data_len=%"PRId16"\n", be16toh(reply_msg->reply.data_len));
-                    }
+            /* Reset data length as it is used to unpack the content */
+            req_msg->call.data_len = 0;
 
-                    RPC_DBG("RPC-S: Send reply\n");
-                    csp_send(me->conn, reply);
-                    reply = NULL;
-                }
-            } while (more);
+            /* Find a possibly matching program handler */
+            const rpc_program_t *prg = lookup_program_from_id(&global_rpc_server->module, program);
+            if (prg) {
+                /* We found a match, call the associated handler */
+                (*prg->handler)(procedure, req_msg);
+            }
         }
         break;
     }
@@ -947,7 +1110,7 @@ int rpc_stop_server(rpc_server_t *me) {
 
 bool rpc_waitfor_connections(rpc_server_t *me) {
 
-    if ((me->conn = csp_accept(&me->sock, me->conn_timeout)) == NULL)
+    if ((me->conn = csp_accept(&me->sock, CSP_MAX_TIMEOUT)) == NULL)
     {
         /* timeout */
         return false;
@@ -971,10 +1134,10 @@ bool rpc_handle_connection(rpc_server_t *me) {
     RPC_DBG("RPC-S: Handle message\n");
     /* Handle the RPC request (call) and send the reply */
     csp_packet_t *reply = NULL;
-    reply = rpc_handle_msg(me, request);
+    reply = rpc_handle_msg(request);
     if (reply) {
         RPC_DBG("RPC-S: Send reply\n");
-        csp_send(me->conn, reply);
+        csp_send(global_rpc_server->conn, reply);
     }
 
     /* Free the request packet */
@@ -984,332 +1147,28 @@ bool rpc_handle_connection(rpc_server_t *me) {
     return true;
 }
 
-int rpc_fetch_first(uint16_t node, rpc_fetch_result_t *result) {
+void rpc_server_main(rpc_server_t *me) {
 
-    int res;;
-
-    res = rpc_connect(global_rpc_client, node);
-    if (!res) {
-        res = rpc_call_invoke(global_rpc_client, RPC_PROGRAM_RPC, RPC_PROCEDURE_FETCH_FIRST,
-            /* CALLBACK */
-                NULL,
-            /*ARGS*/
-                /*void*/
-            /*RETURN*/
-                &result->result,
-                &result->program_id,
-                &result->program_name[0],
-                &result->procedure_id,
-                &result->procedure_name[0],
-                &result->arg_fmt[0],
-                &result->res_fmt[0]
-        );
-        if (res) {
-            RPC_DBG("DSUC: Could not call RPC_PROCEDURE_FETCH - %i\n", res);
-        }
-        rpc_disconnect(global_rpc_client);
+    if (rpc_start_server(me) != CSP_ERR_NONE) {
+        printf("RPC: Could not start the RPC server\n");
+        return;
     }
 
-    return res;
-}
+    /* Wait for connections and then process packets on the connection */
+    printf("RPC: Starting the server loop...\n");
 
-int rpc_fetch_next(uint16_t node, rpc_fetch_result_t *result) {
-
-    int res;
-
-    res = rpc_connect(global_rpc_client, node);
-    if (!res) {
-        res = rpc_call_invoke(global_rpc_client, RPC_PROGRAM_RPC, RPC_PROCEDURE_FETCH_NEXT,
-            /* CALLBACK */
-                NULL,
-            /*ARGS*/
-                /*void*/
-            /*RETURN*/
-                &result->result,
-                &result->program_id,
-                &result->program_name[0],
-                &result->procedure_id,
-                &result->procedure_name[0],
-                &result->arg_fmt[0],
-                &result->res_fmt[0]
-        );
-        if (res) {
-            RPC_DBG("DSUC: Could not call RPC_PROCEDURE_FETCH - %i\n", res);
+    while(true) {
+        /* Wait for a new connection, 10 s timeout */
+        bool connected = rpc_waitfor_connections(me);
+        if (!connected) {
+            /* Timeout, try again */
+            continue;
         }
-        rpc_disconnect(global_rpc_client);
-    }
 
-    return res;
-}
+        /* Keep calling the RPC connection handler, until we dont have a connection */
+        rpc_handle_connection(me);
 
-int rpc_fetch_all(uint16_t node, rpc_fetch_result_t *result, void (*result_cb)(uint32_t, void *, va_list), void *ctx) {
-
-    int res;
-
-    res = rpc_connect(global_rpc_client, node);
-    if (!res) {
-        res = rpc_call_invoke(global_rpc_client, RPC_PROGRAM_RPC, RPC_PROCEDURE_FETCH_ALL,
-            /* CALLBACK */
-                result_cb, ctx,
-            /*ARGS*/
-                /*void*/
-            /*RETURN*/
-                &result->result,
-                &result->program_id,
-                &result->program_name[0],
-                &result->procedure_id,
-                &result->procedure_name[0],
-                &result->arg_fmt[0],
-                &result->res_fmt[0]
-        );
-        if (res) {
-            RPC_DBG("DSUC: Could not call RPC_PROCEDURE_FETCH_ALL - %i\n", res);
-        }
-        rpc_disconnect(global_rpc_client);
-    }
-
-    return res;
-}
-
-typedef struct rpc_prg_data_s {
-    const rpc_program_t *iter_prg;
-    const rpc_procedure_t *iter_proc;
-    uint32_t current_procedure;
-    int32_t nof_procedures;
-} rpc_prg_data_t;
-
-static void rpc_fetch_result_push(rpc_server_t *me, rpc_msg_t *reply, const rpc_program_t *prg, const rpc_procedure_t *proc) {
-
-    if (prg && proc) {
-        rpc_result_push_int32(me, 0, reply);
-        rpc_result_push_uint32(me, prg->program_id, reply);
-        rpc_result_push_string(me, prg->name, reply);
-        rpc_result_push_uint32(me, proc->id, reply);
-        rpc_result_push_string(me, proc->name, reply);
-        rpc_result_push_string(me, proc->arg_fmt, reply);
-        rpc_result_push_string(me, proc->res_fmt, reply);
-    } else {
-        /* Push an empty result to indicate the end */
-        rpc_result_push_int32(me, -1, reply);
-        rpc_result_push_uint32(me, 0, reply);
-        rpc_result_push_string(me, "", reply);
-        rpc_result_push_uint32(me, 0, reply);
-        rpc_result_push_string(me, "", reply);
-        rpc_result_push_string(me, "", reply);
-        rpc_result_push_string(me, "", reply);
+        /* Close our end of the connection and loop */
+        csp_close(me->conn);
     }
 }
-
-static uint32_t count_number_of_procedures(void) {
-
-    extern const rpc_program_t __start_rpc_programs;
-    extern const rpc_program_t __stop_rpc_programs;
-    uint32_t nof_procedures = 0;
-
-    /* Count the total number of procedures */
-    const rpc_program_t *iter_prg = &__start_rpc_programs;
-    while (iter_prg < &__stop_rpc_programs) {
-        const rpc_procedure_t *iter_proc = iter_prg->procedures;
-        while (iter_proc && iter_proc->id != 0xFFFFFFFFUL) {
-            nof_procedures++;
-            iter_proc++;
-        }
-        iter_prg++;
-    }
-
-    return nof_procedures;
-}
-
-static bool find_first_procedure(rpc_prg_data_t *data) {
-    
-    extern const rpc_program_t __start_rpc_programs;
-    extern const rpc_program_t __stop_rpc_programs;
-    bool found = false;
-
-    data->iter_prg = &__start_rpc_programs;
-    while (data->iter_prg < &__stop_rpc_programs) {
-        data->iter_proc = data->iter_prg->procedures;
-        if (data->iter_proc && data->iter_proc->id != 0xFFFFFFFFUL) {
-            found = true;
-            break;
-        }
-        data->iter_prg++;
-    }
-
-    return found;
-}
-
-static bool find_next_procedure(rpc_prg_data_t *data) {
-
-    extern const rpc_program_t __start_rpc_programs;
-    extern const rpc_program_t __stop_rpc_programs;
-    bool found = false;
-
-    /* Advance to the next procedure in the list */
-    data->iter_proc++;
-    if (data->iter_proc->id != 0xFFFFFFFFUL) {
-        found = true;
-    } else {
-        /* Advance the program iterator until we find a valid procedure */
-        data->iter_prg++;
-        while (data->iter_prg < &__stop_rpc_programs) {
-            data->iter_proc = data->iter_prg->procedures;
-            if (data->iter_proc && data->iter_proc->id != 0xFFFFFFFFUL) {
-                found = true;
-                break;
-            }
-            data->iter_prg++;
-        }
-    }
-
-    return found;
-}
-
-static bool rpc_program_handler(rpc_server_t *me, uint32_t program, uint32_t procedure, rpc_msg_t *call, rpc_msg_t *reply, void *data) {
-
-    extern const rpc_program_t __start_rpc_programs;
-    extern const rpc_program_t __stop_rpc_programs;
-    rpc_prg_data_t *prg_data = (rpc_prg_data_t *)data;
-
-    bool more = false;
-
-    switch (procedure) {
-        case RPC_PROCEDURE_FETCH_FIRST:
-        {
-            RPC_DBG("RPC: rpc_fetch_first()\n");
-
-            if (find_first_procedure(prg_data)) {
-                /* Valid program and procedure list */
-                rpc_fetch_result_push(me, reply, prg_data->iter_prg, prg_data->iter_proc);
-            } else {
-                /* The program list is empty */
-                rpc_fetch_result_push(me, reply, NULL, NULL);
-            }
-        }
-        break;
-        case RPC_PROCEDURE_FETCH_NEXT:
-        {
-            RPC_DBG("RPC: rpc_fetch_next()\n");
-
-            if (find_next_procedure(prg_data)) {
-                /* Valid program and procedure list */
-                rpc_fetch_result_push(me, reply, prg_data->iter_prg, prg_data->iter_proc);
-            } else {
-                /* The program list is empty */
-                rpc_fetch_result_push(me, reply, NULL, NULL);
-            }
-        }
-        break;
-        case RPC_PROCEDURE_FETCH_ALL:
-        {
-            RPC_DBG("RPC: rpc_fetch_all()\n");
-
-            /* This can be executed multiple times during an RPC request from a client */
-            if (prg_data->nof_procedures < 0) {
-                /* Initially, start by counting the total amount of procedures */
-                prg_data->current_procedure = 0;
-                prg_data->nof_procedures = count_number_of_procedures();
-                /* Setup initial iterator */
-                find_first_procedure(prg_data);
-            } else {
-                /* Find the next valid procedure */
-                find_next_procedure(prg_data);
-            }
-
-            /* Setup the reply header information regarding the number of replys */
-            rpc_set_reply_header(&reply->reply, prg_data->nof_procedures, prg_data->current_procedure);
-
-            if (prg_data->current_procedure < prg_data->nof_procedures) {
-                rpc_fetch_result_push(me, reply,  prg_data->iter_prg, prg_data->iter_proc);
-                prg_data->current_procedure++;
-                more = true;
-            } else {
-                rpc_fetch_result_push(me, reply, NULL, NULL);
-                prg_data->nof_procedures = -1;
-                more = false;
-            }
-        }
-        break;
-        default:
-            RPC_DBG("RPC: Unhandled RPC procedure call: 0x%"PRIX32"\n", procedure);
-            break;
-    }
-
-    return more;
-}
-
-static rpc_prg_data_t g_prg_data = {
-    .iter_prg = NULL,
-    .iter_proc = NULL,
-    .nof_procedures = -1,
-};
-
-static const rpc_procedure_t g_rpc_procedures[] = {
-    { .id = RPC_PROCEDURE_FETCH_FIRST, .name = "rpc_fetch_first", .arg_fmt = "", .res_fmt = "lLsLsss",
-        .descr = "This method is used to fetch the first entry of RPC programs and it's associated procedures located on a module.",
-        .args = NULL, /* void */
-        .result = (const rpc_proc_arg_t [])
-        {
-            {
-                .descr = "Validity of the entry. 0=valid, -1=invalid/empty",
-                .name = "status", .type = RPC_INT32,
-            },
-            {
-                .descr = "The program identifier uniquely identifying the program",
-                .name = "program_id", .type = RPC_UINT32
-            },
-            {
-                .descr = "The program name",
-                .name = "program_name", .type = RPC_STRING
-            },
-            {
-                .descr = "The procedure ID uniquely identifying the procedure for the particular program",
-                .name = "procedure_id", .type = RPC_UINT32
-            },
-            {
-                .descr = "The procedure name",
-                .name = "procedure_name", .type = RPC_STRING
-            },
-            {
-                .descr = "Argument format string",
-                .name = "arg_fmt", .type = RPC_STRING
-            },
-            {
-                .descr = "Result format string",
-                .name = "res_fmt", .type = RPC_STRING
-            },
-            RPC_PROC_ARG_NULL_INIT,
-        },
-    },
-    { .id = RPC_PROCEDURE_FETCH_NEXT, .name = "rpc_fetch_next", .arg_fmt = "", .res_fmt = "lLsLsss",
-        .args = NULL, /* void */
-        .result = (const rpc_proc_arg_t [])
-        {
-            { .name = "status", .type = RPC_INT32 },
-            { .name = "program_id", .type = RPC_UINT32 },
-            { .name = "program_name", .type = RPC_STRING },
-            { .name = "procedure_id", .type = RPC_UINT32 },
-            { .name = "procedure_name", .type = RPC_STRING },
-            { .name = "arg_fmt", .type = RPC_STRING },
-            { .name = "res_fmt", .type = RPC_STRING },
-            RPC_PROC_ARG_NULL_INIT,
-        },
-    },
-    { .id = RPC_PROCEDURE_FETCH_ALL, .name = "rpc_fetch_all", .arg_fmt = "", .res_fmt = "lLsLsss",
-        .args = NULL, /* void */
-        .result = (const rpc_proc_arg_t [])
-        {
-            { .name = "status", .type = RPC_INT32 },
-            { .name = "program_id", .type = RPC_UINT32 },
-            { .name = "program_name", .type = RPC_STRING },
-            { .name = "procedure_id", .type = RPC_UINT32 },
-            { .name = "procedure_name", .type = RPC_STRING },
-            { .name = "arg_fmt", .type = RPC_STRING },
-            { .name = "res_fmt", .type = RPC_STRING },
-            RPC_PROC_ARG_NULL_INIT,
-        },
-    },
-    RPC_PROCEDURE_NULL_INIT,
-};
-
-RPC_DECLARE_PROGRAM( rpc_server, RPC_PROGRAM_RPC, rpc_program_handler, &g_rpc_procedures[0], &g_prg_data );
