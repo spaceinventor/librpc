@@ -280,7 +280,6 @@ int rpc_client_init(rpc_client_t *me) {
     return RPC_STATUS_OK;
 }
 
-#if 0
 csp_packet_t * rpc_result_prepare(rpc_msg_t *msg) {
 
     csp_packet_t *packet;
@@ -292,7 +291,7 @@ csp_packet_t * rpc_result_prepare(rpc_msg_t *msg) {
         reply_msg->version = RPC_VERSION;
         reply_msg->xid = msg->xid;
         reply_msg->reply.data_len = htobe32(0);
-        reply_msg->reply.lastidx = htobe32(0);
+        reply_msg->reply.amount = htobe32(0);
         reply_msg->reply.idx = htobe32(0);
         packet->length = sizeof(reply_msg->type) + sizeof(reply_msg->version) + sizeof(reply_msg->xid) + sizeof(reply_msg->reply);
     }
@@ -352,7 +351,7 @@ static csp_packet_t * rpc_handle_msg(csp_packet_t *packet) {
 
 void rpc_set_reply_header(rpc_reply_t *reply, uint32_t lastidx, uint32_t idx) {
 
-    reply->lastidx = htobe32(lastidx);
+    reply->amount = htobe32(lastidx);
     reply->idx = htobe32(idx);
 }
 
@@ -454,4 +453,3 @@ void rpc_server_main(rpc_server_t *me) {
         csp_close(me->conn);
     }
 }
-#endif
