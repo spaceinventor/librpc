@@ -253,8 +253,8 @@ RPC_HANDLE_CLIENT_HDR(double, double)
 
 extern void rpc_request_push_string(const char *value, rpc_msg_t *msg);
 extern void rpc_request_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg);
-extern void rpc_result_pop_string(char * value, rpc_msg_t *msg);
-extern void rpc_result_pop_buffer(uint8_t **value, uint16_t *len, rpc_msg_t *msg);
+extern void rpc_result_pop_string(char *value, rpc_msg_t *msg);
+extern void rpc_result_pop_buffer(uint8_t *value, uint16_t *len, rpc_msg_t *msg);
 
 /* Main loop server side methods */
 extern rpc_server_t *global_rpc_server;
@@ -280,8 +280,8 @@ RPC_HANDLE_SERVER_HDR(float, float)
 RPC_HANDLE_SERVER_HDR(double, double)
 #undef RPC_HANDLE_SERVER_HDR
 
-extern void rpc_request_pop_string(char **value, rpc_msg_t *msg);
-extern void rpc_request_pop_buffer(uint8_t **value, uint16_t *len, rpc_msg_t *msg);
+extern void rpc_request_pop_string(char *value, rpc_msg_t *msg);
+extern void rpc_request_pop_buffer(uint8_t *value, uint16_t *len, rpc_msg_t *msg);
 extern void rpc_result_push_string(const char *value, rpc_msg_t *msg);
 extern void rpc_result_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg);
 

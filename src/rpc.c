@@ -80,12 +80,12 @@ void rpc_request_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg)
     call->data_len += len;
 }
 
-void rpc_result_pop_string(char * value, rpc_msg_t *msg) {
+void rpc_result_pop_string(char *value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
 
-    size_t len = strlen((const char *)&reply->data[reply->data_len]);
-    strcpy(value, (const char *)&reply->data[reply->data_len]);
+    size_t len = strlen((char *)&reply->data[reply->data_len]);
+    strcpy(value, (char *)&reply->data[reply->data_len]);
 
     reply->data_len += len + 1;
 }
@@ -131,34 +131,29 @@ RPC_HANDLE_SERVER_IMPL(float, float)
 RPC_HANDLE_SERVER_IMPL(double, double)
 #undef RPC_HANDLE_SERVER_IMPL
 
-void rpc_request_pop_string(char **value, rpc_msg_t *msg) {
+void rpc_request_pop_string(char *value, rpc_msg_t *msg) {
 
-    rpc_call_t *call = &msg->call;
-    uint16_t data_len = be16toh(call->data_len);
+    rpc_call_t *request = &msg->call;
 
-    size_t len = strlen((const char *)&call->data[data_len]);
-    strcpy(*value, (const char *)&call->data[data_len]);
+    size_t len = strlen((char *)&request->data[request->data_len]);
+    strcpy(value, (char *)&request->data[request->data_len]);
 
-    data_len += len + 1;
-    call->data_len = htobe16(data_len);
+    request->data_len += len + 1;
 }
 
 void rpc_request_pop_buffer(uint8_t *value, uint16_t *len, rpc_msg_t *msg) {
 
-    rpc_call_t *call = &msg->call;
-    uint16_t data_len = be16toh(call->data_len);
+    rpc_call_t *request = &msg->call;
 
     *len = rpc_request_pop_uint16(msg);
-    memcpy(value, &call->data[data_len], *len);
+    memcpy(value, &request->data[request->data_len], *len);
 
-    data_len += *len;
-    call->data_len = htobe16(data_len);
+    request->data_len += *len;
 }
 
 void rpc_result_push_string(const char *value, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
-    uint16_t data_len = be16toh(reply->data_len);
 
     const char *empty = "";
     if (!value) {
@@ -166,27 +161,23 @@ void rpc_result_push_string(const char *value, rpc_msg_t *msg) {
     }
 
     size_t size = strlen(value) + 1; /* Including the NULL termination character */
-    memcpy(&reply->data[data_len], value, size);
+    memcpy(&reply->data[reply->data_len], value, size);
 
-    data_len += size;
-    reply->data_len = htobe16(data_len);
+    reply->data_len += size;
 }
 
 void rpc_result_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg) {
 
     rpc_reply_t *reply = &msg->reply;
-    uint16_t data_len = be16toh(reply->data_len);
 
     /* Put the buffer length into the packet */
     uint16_t len_be = htobe16(len);
-    memcpy(&reply->data[data_len], &len_be, sizeof(uint16_t));
-    data_len += sizeof(uint16_t);
+    memcpy(&reply->data[reply->data_len], &len_be, sizeof(uint16_t));
+    reply->data_len += sizeof(uint16_t);
 
     /* Put the data into the packet - if any */
-    memcpy(&reply->data[data_len], value, len);
-    data_len += len;
-
-    reply->data_len = htobe16(data_len);
+    memcpy(&reply->data[reply->data_len], value, len);
+    reply->data_len += len;
 }
 
 
