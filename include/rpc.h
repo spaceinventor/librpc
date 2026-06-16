@@ -210,16 +210,10 @@ typedef struct rpc_program_s {
 typedef struct rpc_module_s {
     uint32_t nof_programs;
     const rpc_program_t *programs;
-    rpc_program_list_t remote;
 } rpc_module_t;
 
 typedef struct client_s {
-    csp_conn_t *conn;
     uint32_t timeout;
-    rpc_module_t module;
-    /* Free lists */
-    rpc_program_list_t program_slot;
-    rpc_procedure_list_t procedure_slot;
 } rpc_client_t;
 
 typedef struct rpc_server_s {
@@ -232,49 +226,62 @@ typedef struct rpc_server_s {
 
 /* Client side methods */
 extern rpc_client_t *global_rpc_client;
-extern int rpc_init_client(rpc_client_t *me, uint32_t nof_programs, rpc_program_t *programs, uint32_t nof_procedures, rpc_procedure_t *procedures);
-extern void rpc_remove_remote_programs(rpc_client_t *me, uint16_t node);
-extern rpc_program_t *rpc_register_remote_program(rpc_client_t *me, uint16_t node, uint32_t program_id);
-extern rpc_procedure_t *rpc_register_remote_procedure(rpc_client_t *me, rpc_program_t *program, uint32_t procedure_id);
-extern void rpc_list_remote_programs(rpc_client_t *me, uint16_t node);
-extern int rpc_connect(rpc_client_t *me, uint16_t node);
-extern int rpc_disconnect(rpc_client_t *me);
-extern int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...);
+extern int rpc_client_init(rpc_client_t *me);
+
+extern csp_conn_t *rpc_connect(uint16_t node);
+extern int rpc_build_request(uint16_t node, uint32_t program, uint32_t procedure, csp_conn_t ** conn, rpc_msg_t **req_msg);
+extern void rpc_send(csp_conn_t *conn, rpc_msg_t *msg);
+extern void rpc_buffer_free(rpc_msg_t *msg);
+extern int rpc_disconnect(csp_conn_t *conn);
+extern int rpc_get_reply(csp_conn_t *conn, rpc_msg_t **msg, uint32_t maxresponses, uint32_t extected_idx, uint32_t timeout);
+
+#define RPC_HANDLE_CLIENT_HDR(type, name) \
+    void rpc_request_push_##name(type value, rpc_msg_t *msg); \
+    type rpc_result_pop_##name(rpc_msg_t *msg);
+
+RPC_HANDLE_CLIENT_HDR(uint8_t, uint8)
+RPC_HANDLE_CLIENT_HDR(int8_t, int8)
+RPC_HANDLE_CLIENT_HDR(uint16_t, uint16)
+RPC_HANDLE_CLIENT_HDR(int16_t, int16)
+RPC_HANDLE_CLIENT_HDR(uint32_t, uint32)
+RPC_HANDLE_CLIENT_HDR(int32_t, int32)
+RPC_HANDLE_CLIENT_HDR(uint64_t, uint64)
+RPC_HANDLE_CLIENT_HDR(int64_t, int64)
+RPC_HANDLE_CLIENT_HDR(float, float)
+RPC_HANDLE_CLIENT_HDR(double, double)
+#undef RPC_HANDLE_CLIENT_HDR
+
+extern void rpc_request_push_string(const char *value, rpc_msg_t *msg);
+extern void rpc_request_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg);
+extern void rpc_result_pop_string(char * value, rpc_msg_t *msg);
+extern void rpc_result_pop_buffer(uint8_t **value, uint16_t *len, rpc_msg_t *msg);
 
 /* Main loop server side methods */
 extern rpc_server_t *global_rpc_server;
-extern int rpc_start_server(rpc_server_t *me);
-extern int rpc_stop_server(rpc_server_t *me);
-extern bool rpc_waitfor_connections(rpc_server_t *me);
-extern bool rpc_handle_connection(rpc_server_t *me);
 extern void rpc_server_main(rpc_server_t *me);
 
 /* Server side call handler methods */
 extern csp_packet_t * rpc_result_prepare(rpc_msg_t *msg);
-extern void rpc_set_reply_header(rpc_reply_t *reply, uint32_t amount, uint32_t idx);
-extern int rpc_call_deserialize(rpc_msg_t *msg, ...);
-extern uint8_t rpc_request_pop_uint8(rpc_msg_t *msg);
-extern int8_t rpc_request_pop_int8(rpc_msg_t *msg);
-extern uint16_t rpc_request_pop_uint16(rpc_msg_t *msg);
-extern int16_t rpc_request_pop_int16(rpc_msg_t *msg);
-extern uint32_t rpc_request_pop_uint32(rpc_msg_t *msg);
-extern int32_t rpc_request_pop_int32(rpc_msg_t *msg);
-extern uint64_t rpc_request_pop_uint64(rpc_msg_t *msg);
-extern int64_t rpc_request_pop_int64(rpc_msg_t *msg);
-extern float rpc_request_pop_float(rpc_msg_t *msg);
-extern double rpc_request_pop_double(rpc_msg_t *msg);
+extern void rpc_set_reply_header(rpc_reply_t *reply, uint32_t lastidx, uint32_t idx);
+
+#define RPC_HANDLE_SERVER_HDR(type, name) \
+    void rpc_result_push_##name(type value, rpc_msg_t *msg); \
+    type rpc_request_pop_##name(rpc_msg_t *msg);
+
+RPC_HANDLE_SERVER_HDR(uint8_t, uint8)
+RPC_HANDLE_SERVER_HDR(int8_t, int8)
+RPC_HANDLE_SERVER_HDR(uint16_t, uint16)
+RPC_HANDLE_SERVER_HDR(int16_t, int16)
+RPC_HANDLE_SERVER_HDR(uint32_t, uint32)
+RPC_HANDLE_SERVER_HDR(int32_t, int32)
+RPC_HANDLE_SERVER_HDR(uint64_t, uint64)
+RPC_HANDLE_SERVER_HDR(int64_t, int64)
+RPC_HANDLE_SERVER_HDR(float, float)
+RPC_HANDLE_SERVER_HDR(double, double)
+#undef RPC_HANDLE_SERVER_HDR
+
 extern void rpc_request_pop_string(char **value, rpc_msg_t *msg);
 extern void rpc_request_pop_buffer(uint8_t **value, uint16_t *len, rpc_msg_t *msg);
-extern void rpc_result_push_uint8(uint8_t value, rpc_msg_t *msg);
-extern void rpc_result_push_int8(int8_t value, rpc_msg_t *msg);
-extern void rpc_result_push_uint16(uint16_t value, rpc_msg_t *msg);
-extern void rpc_result_push_int16(int16_t value, rpc_msg_t *msg);
-extern void rpc_result_push_uint32(uint32_t value, rpc_msg_t *msg);
-extern void rpc_result_push_int32(int32_t value, rpc_msg_t *msg);
-extern void rpc_result_push_uint64(uint64_t value, rpc_msg_t *msg);
-extern void rpc_result_push_int64(int64_t value, rpc_msg_t *msg);
-extern void rpc_result_push_float(float value, rpc_msg_t *msg);
-extern void rpc_result_push_double(double value, rpc_msg_t *msg);
 extern void rpc_result_push_string(const char *value, rpc_msg_t *msg);
 extern void rpc_result_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg);
 

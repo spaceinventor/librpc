@@ -31,7 +31,7 @@ TYPE_MAPPING = {
     'x64': 'uint64_t',
     'f32': 'float',
     'f64': 'double',
-    'string': 'const char *',
+    'string': 'char *',
 }
 
 DEFAULT_STRING_MAX = 256
@@ -49,10 +49,8 @@ def get_field_declaration(field: Dict[str, Any], context: str) -> str:
     json_type = field['type']
     name = field['name']
     if json_type == 'string':
-        if context == 'request':
-            max_length = field.get('max_length', field.get('max_len', DEFAULT_STRING_MAX))
-            return f"char {name}[{max_length}]"
-        return f"const char *{name}"
+        max_length = field.get('max_length', field.get('max_len', DEFAULT_STRING_MAX))
+        return f"char {name}[{max_length}]"
     return f"{get_c_type(json_type)} {name}"
 
 
@@ -137,6 +135,7 @@ def generate_client_header(spec: Dict[str, Any]) -> str:
     lines.append("")
     lines.append("/* Client-side Functions */")
     for proc in procedures:
+        maxresponses = proc.get('maxresponses', 1)
         proc_name = proc['name']
         request_typedef = f"rpc_{program}_{proc_name}_request_t"
         response_typedef = f"rpc_{program}_{proc_name}_response_t"
@@ -146,7 +145,10 @@ def generate_client_header(spec: Dict[str, Any]) -> str:
             lines.append(f"{request_typedef} {to_function_name(program, proc_name, 'init')}({init_params});")
         else:
             lines.append(f"{request_typedef} {to_function_name(program, proc_name, 'init')}(void);")
-        lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, const {request_typedef} *request, {response_typedef} *response);")
+        if maxresponses > 1:
+            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, const {request_typedef} *request, {response_typedef} *response, uint32_t *numresponses);")
+        else:
+            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, const {request_typedef} *request, {response_typedef} *response);") 
         lines.append("")
     lines.append(f"#endif /* {guard} */")
     return "\n".join(lines)
@@ -191,12 +193,6 @@ def generate_client_implementation(spec: Dict[str, Any]) -> str:
     lines.append(f'#include "rpc_{program}.h"')
     lines.append("#include <string.h>")
     lines.append("")
-    lines.append("/* Framework functions - defined elsewhere */")
-    lines.append("extern int rpc_call_invoke(void *rpc, uint32_t program, uint32_t procedure, ...);")
-    lines.append("extern int rpc_connect(void *rpc, uint16_t node);")
-    lines.append("extern int rpc_disconnect(void *rpc);")
-    lines.append("extern void *g_crpc;")
-    lines.append("")
     
     # Init functions
     for proc in procedures:
@@ -208,7 +204,7 @@ def generate_client_implementation(spec: Dict[str, Any]) -> str:
         else:
             init_params = "void"
         lines.append(f"{request_typedef} {to_function_name(program, proc_name, 'init')}({init_params}) {{")
-        lines.append(f"    {request_typedef} request = {{0}};")
+        lines.append(f"    {request_typedef} request;")
         for field in non_default_fields:
             lines.append(f"    request.{field['name']} = {field['name']};")
         for field in proc['request']:
@@ -226,30 +222,112 @@ def generate_client_implementation(spec: Dict[str, Any]) -> str:
     # Client methods
     lines.append("/* Client Call Functions */")
     for proc in procedures:
+        maxresponses = proc.get('maxresponses', 1)
         proc_name = proc['name']
         request_typedef = f"rpc_{program}_{proc_name}_request_t"
         response_typedef = f"rpc_{program}_{proc_name}_response_t"
         program_upper = to_macro_name(program)
         proc_upper = to_macro_name(proc_name)
-        lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, const {request_typedef} *request, {response_typedef} *response) {{")
-        lines.append("    int result = rpc_connect(g_crpc, node);")
-        lines.append("    if (result < 0) {")
-        lines.append("        return result;")
+        if maxresponses > 1:
+            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, const {request_typedef} *request, {response_typedef} *response, uint32_t *numresponses) {{")
+        else:
+            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, const {request_typedef} *request, {response_typedef} *response) {{")
+        lines.append("")
+        lines.append("    csp_conn_t *conn = NULL;")
+        lines.append("    rpc_msg_t *request_msg = NULL;")
+        lines.append("    rpc_msg_t *reply_msg = NULL;")
+        lines.append("")
+        lines.append(f"    int status = rpc_build_request(node, RPC_PROGRAM_{program_upper}, RPC_{program_upper}_{proc_upper}, &conn, &request_msg);")
+        lines.append("    if (status != RPC_STATUS_OK) {")
+        lines.append("        return status;")
         lines.append("    }")
         lines.append("")
-        invoke_args = [f"g_crpc", f"RPC_PROGRAM_{program_upper}", f"RPC_{program_upper}_{proc_upper}"]
+        lines.append("    /* Add request fields */")
         for field in proc['request']:
-            invoke_args.append(f"request->{field['name']}")
-        for field in proc['response']:
-            invoke_args.append(f"&response->{field['name']}")
-        lines.append(f"    result = rpc_call_invoke({', '.join(invoke_args)});")
+            field_type = field['type']
+            if field_type == 'string':
+                lines.append(f"    rpc_request_push_string(request->{field['name']}, request_msg);")
+            else:
+                c_type = get_c_type(field_type)
+                if c_type == 'int32_t':
+                    push_func = 'rpc_request_push_int32'
+                elif c_type == 'int16_t':
+                    push_func = 'rpc_request_push_int16'
+                elif c_type == 'int8_t':
+                    push_func = 'rpc_request_push_int8'
+                elif c_type == 'uint32_t':
+                    push_func = 'rpc_request_push_uint32'
+                elif c_type == 'uint16_t':
+                    push_func = 'rpc_request_push_uint16'
+                elif c_type == 'uint8_t':
+                    push_func = 'rpc_request_push_uint8'
+                elif c_type == 'int64_t':
+                    push_func = 'rpc_request_push_int64'
+                elif c_type == 'uint64_t':
+                    push_func = 'rpc_request_push_uint64'
+                elif c_type == 'float':
+                    push_func = 'rpc_request_push_float'
+                elif c_type == 'double':
+                    push_func = 'rpc_request_push_double'
+                else:
+                    push_func = 'rpc_request_push_uint32'
+                lines.append(f"    {push_func}(request->{field['name']}, request_msg);")
         lines.append("")
-        lines.append("    rpc_disconnect(g_crpc);")
-        lines.append("    return result;")
+        lines.append("    rpc_send(conn, request_msg);")
+        lines.append("")
+        lines.append("    uint32_t idx = 0;")
+        lines.append("    do {")
+        lines.append(f"        status = rpc_get_reply(conn, &reply_msg, {maxresponses if maxresponses > 1 else 1}, idx, global_rpc_client->timeout);")
+        lines.append("        if (status != RPC_STATUS_OK) {")
+        lines.append("            rpc_disconnect(conn);")
+        lines.append("            return status;")
+        lines.append("        }")
+        lines.append("")
+        lines.append("        /* Extract response fields */")
+        for field in proc['response']:
+            field_type = field['type']
+            if field_type == 'string':
+                lines.append(f"        rpc_result_pop_string(response[idx].{field['name']}, reply_msg);")
+            else:
+                c_type = get_c_type(field_type)
+                if c_type == 'int32_t':
+                    pop_func = 'rpc_result_pop_int32'
+                elif c_type == 'int16_t':
+                    pop_func = 'rpc_result_pop_int16'
+                elif c_type == 'int8_t':
+                    pop_func = 'rpc_result_pop_int8'
+                elif c_type == 'uint32_t':
+                    pop_func = 'rpc_result_pop_uint32'
+                elif c_type == 'uint16_t':
+                    pop_func = 'rpc_result_pop_uint16'
+                elif c_type == 'uint8_t':
+                    pop_func = 'rpc_result_pop_uint8'
+                elif c_type == 'int64_t':
+                    pop_func = 'rpc_result_pop_int64'
+                elif c_type == 'uint64_t':
+                    pop_func = 'rpc_result_pop_uint64'
+                elif c_type == 'float':
+                    pop_func = 'rpc_result_pop_float'
+                elif c_type == 'double':
+                    pop_func = 'rpc_result_pop_double'
+                else:
+                    pop_func = 'rpc_result_pop_uint32'
+                lines.append(f"        response[idx].{field['name']} = {pop_func}(reply_msg);")
+        lines.append("")
+        lines.append("        rpc_buffer_free(reply_msg);")
+        lines.append("        idx++;")
+        lines.append("")
+        lines.append("    } while (idx < reply_msg->reply.amount);")
+        lines.append("")
+        if maxresponses > 1:
+            lines.append("    *numresponses = idx;")
+        lines.append("")
+        lines.append("    return rpc_disconnect(conn);")
         lines.append("}")
         lines.append("")
     
     return "\n".join(lines)
+
 
 
 def generate_server_implementation(spec: Dict[str, Any]) -> str:
