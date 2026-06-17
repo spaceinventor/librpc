@@ -178,7 +178,7 @@ def generate_server_header(spec: Dict[str, Any]) -> str:
         else:
             lines.append(f"void {to_function_name(program, proc_name, 'host')}(const {request_typedef} *request, {response_typedef} *response);")
         lines.append("")
-    lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, rpc_msg_t *call_msg);")
+    lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, csp_conn_t *conn, rpc_msg_t *call_msg);")
     lines.append("")
     lines.append(f"#endif /* {guard} */")
     return "\n".join(lines)
@@ -342,7 +342,7 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
     lines.append("")
     lines.append("/* Server Handler Dispatcher */")
     program_upper = to_macro_name(program)
-    lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, rpc_msg_t *call) {{")
+    lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, csp_conn_t *conn, rpc_msg_t *call) {{")
     lines.append("")
     lines.append("    switch (procedure) {")
     for proc in procedures:
@@ -419,7 +419,7 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
                 else:
                     push_func = 'rpc_result_push_int32'
                 lines.append(f"                {push_func}(response[i].{field['name']}, reply);")
-        lines.append("                rpc_send_reply(global_rpc_server->conn, reply);")
+        lines.append(f"                rpc_send_reply(conn, reply);")
         lines.append("            }")
         lines.append("            break;")
         lines.append("        }")

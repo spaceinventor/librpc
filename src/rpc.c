@@ -303,7 +303,7 @@ static const rpc_program_t * lookup_program_from_id(rpc_module_t *module, uint32
     return program;
 }
 
-static void rpc_handle_msg(csp_packet_t *packet) {
+static void rpc_handle_msg(csp_conn_t *conn, csp_packet_t *packet) {
 
     rpc_msg_t *req_msg = (rpc_msg_t *)packet->data;
 
@@ -327,13 +327,13 @@ static void rpc_handle_msg(csp_packet_t *packet) {
             const rpc_program_t *prg = lookup_program_from_id(&global_rpc_server->module, program);
             if (prg) {
                 /* We found a match, call the associated handler */
-                int missingdatasize = (*prg->handler)(procedure, req_msg);
+                int missingdatasize = (*prg->handler)(procedure, conn, req_msg);
                 if (missingdatasize > 0) {
                     /* The response array size is 0, send empty response as ACK */
                     rpc_msg_t *reply = rpc_result_prepare(req_msg, 0, 0);
                     memset(reply->reply.data, 0, missingdatasize);
                     reply->reply.data_len = missingdatasize;
-                    rpc_send_reply(global_rpc_server->conn, reply);
+                    rpc_send_reply(conn, reply);
                 }
             } else {
                 /* No match found, we can not handle this request */
@@ -388,23 +388,24 @@ static int rpc_start_server(rpc_server_t *me) {
     return RPC_STATUS_OK;
 }
 
-static bool rpc_waitfor_connections(rpc_server_t *me) {
+static csp_conn_t * rpc_waitfor_connections(rpc_server_t *me) {
 
-    if ((me->conn = csp_accept(&me->sock, CSP_MAX_TIMEOUT)) == NULL)
-    {
-        /* timeout */
-        return false;
+    csp_conn_t *conn = csp_accept(&me->sock, CSP_MAX_TIMEOUT);
+
+    if (!conn) {
+        RPC_ERR("RPC-S: Error accepting incoming connection.\n");
+        return conn;
     }
 
-    RPC_DBG("RPC-S: Incoming connection from: %"PRIu16":%"PRIu16"\n", csp_conn_src(me->conn), csp_conn_sport(me->conn));
+    RPC_DBG("RPC-S: Incoming connection from: %"PRIu16":%"PRIu16"\n", csp_conn_src(conn), csp_conn_sport(conn));
 
-    return true;
+    return conn;
 }
 
-static bool rpc_handle_connection(rpc_server_t *me) {
+static bool rpc_handle_connection(csp_conn_t *conn) {
 
     /* Read request packets on connection */
-    csp_packet_t *request = csp_read(me->conn, me->timeout);
+    csp_packet_t *request = csp_read(conn, 0);
     if (NULL == request) {
         /* The connection is lost, tell the caller */
         RPC_DBG("RPC-S: Client disconnected or timeout.\n");
@@ -413,7 +414,7 @@ static bool rpc_handle_connection(rpc_server_t *me) {
 
     RPC_DBG("RPC-S: Handle message\n");
     /* Handle the RPC request (call) and send the reply */
-    rpc_handle_msg(request);
+    rpc_handle_msg(conn, request);
 
     /* Free the request packet */
     csp_buffer_free(request);
@@ -434,16 +435,16 @@ void rpc_server_main(rpc_server_t *me) {
 
     while(true) {
         /* Wait for a new connection, 10 s timeout */
-        bool connected = rpc_waitfor_connections(me);
-        if (!connected) {
+        csp_conn_t *conn = rpc_waitfor_connections(me);
+        if (conn == NULL) {
             /* Timeout, try again */
             continue;
         }
 
         /* Keep calling the RPC connection handler, until we dont have a connection */
-        rpc_handle_connection(me);
+        rpc_handle_connection(conn);
 
         /* Close our end of the connection and loop */
-        csp_close(me->conn);
+        csp_close(conn);
     }
 }

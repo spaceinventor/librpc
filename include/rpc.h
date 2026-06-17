@@ -146,12 +146,13 @@ typedef struct rpc_server_s rpc_server_t;
  * @param me A pointer to a RPC server object instance
  * @param program The program to execute a specific procedure on
  * @param procedure The procedure to execute on the specified program
+ * @param conn The connection on which the call was received
  * @param call Pointer to the rpc_msg_t packet containing the call request being processed
  * @param reply Pointer to a rpc_msg_t packet which will receive the procedure return objects
  * @param ctx Call back context pointer, which will be passed along
  * @return true: call me again, false: done
  */
-typedef int rpc_server_callback_t(uint32_t procedure, rpc_msg_t *call);
+typedef int rpc_server_callback_t(uint32_t procedure, csp_conn_t *conn, rpc_msg_t *call);
 
 SLIST_HEAD( rpc_program_list_s, rpc_program_s );
 typedef struct rpc_program_list_s rpc_program_list_t;
@@ -217,11 +218,8 @@ typedef struct client_s {
 } rpc_client_t;
 
 typedef struct rpc_server_s {
-    csp_conn_t *conn;
-    uint32_t timeout;
     csp_socket_t sock;
     rpc_module_t module;
-    uint8_t spad_buffer[2000];
 } rpc_server_t;
 
 /* Client side methods */
