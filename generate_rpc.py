@@ -132,6 +132,7 @@ def generate_client_header(spec: Dict[str, Any]) -> str:
     lines.append(f"#define {guard}")
     lines.append("")
     lines.append(f"#include \"rpc_{program}.h\"")
+    lines.append(f"#include <rpc_client.h>")
     lines.append("")
     lines.append("/* Client-side Functions */")
     for proc in procedures:
@@ -146,9 +147,9 @@ def generate_client_header(spec: Dict[str, Any]) -> str:
         else:
             lines.append(f"{request_typedef} {to_function_name(program, proc_name, 'init')}(void);")
         if maxresponses > 1:
-            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, const {request_typedef} *request, {response_typedef} *response, uint32_t *numresponses);")
+            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, uint32_t timeout, const {request_typedef} *request, {response_typedef} *response, uint32_t *numresponses);")
         else:
-            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, const {request_typedef} *request, {response_typedef} *response);") 
+            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, uint32_t timeout, const {request_typedef} *request, {response_typedef} *response);") 
         lines.append("")
     lines.append(f"#endif /* {guard} */")
     return "\n".join(lines)
@@ -165,6 +166,7 @@ def generate_server_header(spec: Dict[str, Any]) -> str:
     lines.append(f"#define {guard}")
     lines.append("")
     lines.append(f"#include \"rpc_{program}.h\"")
+    lines.append(f"#include <rpc_server.h>")
     lines.append("")
     lines.append("/* Server-side Handler */")
     lines.append("/* User must implement this handler */")
@@ -191,6 +193,7 @@ def generate_client_implementation(spec: Dict[str, Any]) -> str:
     
     lines = []
     lines.append(f'#include "rpc_{program}.h"')
+    lines.append("#include <rpc_client.h>")
     lines.append("#include <string.h>")
     lines.append("")
     
@@ -229,9 +232,9 @@ def generate_client_implementation(spec: Dict[str, Any]) -> str:
         program_upper = to_macro_name(program)
         proc_upper = to_macro_name(proc_name)
         if maxresponses > 1:
-            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, const {request_typedef} *request, {response_typedef} *response, uint32_t *numresponses) {{")
+            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, uint32_t timeout, const {request_typedef} *request, {response_typedef} *response, uint32_t *numresponses) {{")
         else:
-            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, const {request_typedef} *request, {response_typedef} *response) {{")
+            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, uint32_t timeout, const {request_typedef} *request, {response_typedef} *response) {{")
         lines.append("")
         lines.append("    csp_conn_t *conn = NULL;")
         lines.append("    rpc_msg_t *request_msg = NULL;")
@@ -277,7 +280,7 @@ def generate_client_implementation(spec: Dict[str, Any]) -> str:
         lines.append("")
         lines.append("    uint32_t idx = 0;")
         lines.append("    do {")
-        lines.append(f"        status = rpc_get_reply(conn, &reply_msg, {maxresponses if maxresponses > 1 else 1}, idx, global_rpc_client->timeout);")
+        lines.append(f"        status = rpc_get_reply(conn, &reply_msg, {maxresponses if maxresponses > 1 else 1}, idx, timeout);")
         lines.append("        if (status != RPC_STATUS_OK) {")
         lines.append("            rpc_disconnect(conn);")
         lines.append("            return status;")
