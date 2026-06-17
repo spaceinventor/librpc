@@ -151,7 +151,7 @@ typedef struct rpc_server_s rpc_server_t;
  * @param ctx Call back context pointer, which will be passed along
  * @return true: call me again, false: done
  */
-typedef void rpc_server_callback_t(uint32_t procedure, rpc_msg_t *call);
+typedef int rpc_server_callback_t(uint32_t procedure, rpc_msg_t *call);
 
 SLIST_HEAD( rpc_program_list_s, rpc_program_s );
 typedef struct rpc_program_list_s rpc_program_list_t;

@@ -327,14 +327,21 @@ static void rpc_handle_msg(csp_packet_t *packet) {
             const rpc_program_t *prg = lookup_program_from_id(&global_rpc_server->module, program);
             if (prg) {
                 /* We found a match, call the associated handler */
-                (*prg->handler)(procedure, req_msg);
+                int missingdatasize = (*prg->handler)(procedure, req_msg);
+                if (missingdatasize > 0) {
+                    /* The response array size is 0, send empty response as ACK */
+                    rpc_msg_t *reply = rpc_result_prepare(req_msg, 0, 0);
+                    memset(reply->reply.data, 0, missingdatasize);
+                    reply->reply.data_len = missingdatasize;
+                    rpc_send_reply(global_rpc_server->conn, reply);
+                }
+            } else {
+                /* No match found, we can not handle this request */
+                RPC_ERR("RPC-S: No handler found for program 0x%"PRIX32"\n", program);
             }
         }
         break;
     }
-
-    return reply;
-
 }
 
 void rpc_send_reply(csp_conn_t *conn, rpc_msg_t *reply) {

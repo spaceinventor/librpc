@@ -178,7 +178,7 @@ def generate_server_header(spec: Dict[str, Any]) -> str:
         else:
             lines.append(f"void {to_function_name(program, proc_name, 'host')}(const {request_typedef} *request, {response_typedef} *response);")
         lines.append("")
-    lines.append(f"void rpc_handle_calls_{program}(uint32_t procedure, rpc_msg_t *call_msg);")
+    lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, rpc_msg_t *call_msg);")
     lines.append("")
     lines.append(f"#endif /* {guard} */")
     return "\n".join(lines)
@@ -342,7 +342,7 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
     lines.append("")
     lines.append("/* Server Handler Dispatcher */")
     program_upper = to_macro_name(program)
-    lines.append(f"void rpc_handle_calls_{program}(uint32_t procedure, rpc_msg_t *call_msg) {{")
+    lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, rpc_msg_t *call) {{")
     lines.append("")
     lines.append("    switch (procedure) {")
     for proc in procedures:
@@ -391,6 +391,8 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
         lines.append("")
         if maxresponses > 1:
             lines.append(f"            {to_function_name(program, proc_name, 'host')}(&request, response, &numresponses);")
+            lines.append("")
+            lines.append(f"            if (numresponses == 0) return sizeof({response_typedef});")
         else:
             lines.append(f"            {to_function_name(program, proc_name, 'host')}(&request, response);")
         lines.append("")
@@ -424,6 +426,7 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
     lines.append("        default:")
     lines.append("            break;")
     lines.append("    }")
+    lines.append("    return 0;")
     lines.append("}")
     lines.append("")
     return "\n".join(lines)
