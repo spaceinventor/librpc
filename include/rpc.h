@@ -261,8 +261,8 @@ extern rpc_server_t *global_rpc_server;
 extern void rpc_server_main(rpc_server_t *me);
 
 /* Server side call handler methods */
-extern csp_packet_t * rpc_result_prepare(rpc_msg_t *msg);
-extern void rpc_set_reply_header(rpc_reply_t *reply, uint32_t lastidx, uint32_t idx);
+extern rpc_msg_t *rpc_result_prepare(rpc_msg_t *call, uint32_t amount, uint32_t idx);
+extern void rpc_send_reply(csp_conn_t *conn, rpc_msg_t *reply);
 
 #define RPC_HANDLE_SERVER_HDR(type, name) \
     void rpc_result_push_##name(type value, rpc_msg_t *msg); \

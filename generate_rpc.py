@@ -362,7 +362,7 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
             field_type = field['type']
             if field_type == 'string':
                 lines.append(f"            char *{field['name']}_ptr = request.{field['name']};")
-                lines.append(f"            rpc_request_pop_string(&{field['name']}_ptr, call_msg);")
+                lines.append(f"            rpc_request_pop_string(&{field['name']}_ptr, call);")
             else:
                 c_type = get_c_type(field_type)
                 if c_type == 'int32_t':
@@ -387,7 +387,7 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
                     pop_func = 'rpc_request_pop_double'
                 else:
                     pop_func = 'rpc_request_pop_uint32'
-                lines.append(f"            request.{field['name']} = {pop_func}(call_msg);")
+                lines.append(f"            request.{field['name']} = {pop_func}(call);")
         lines.append("")
         if maxresponses > 1:
             lines.append(f"            {to_function_name(program, proc_name, 'host')}(&request, response, &numresponses);")
@@ -395,13 +395,11 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
             lines.append(f"            {to_function_name(program, proc_name, 'host')}(&request, response);")
         lines.append("")
         lines.append("            for (uint32_t i = 0; i < numresponses; i++) {")
-        lines.append("                csp_packet_t *reply = rpc_result_prepare(call_msg);")
-        lines.append("                rpc_msg_t *reply_msg = (rpc_msg_t *)reply->data;")
-        lines.append("                rpc_set_reply_header(&reply_msg->reply, numresponses-1, i);")
+        lines.append("                rpc_msg_t *reply = rpc_result_prepare(call, numresponses-1, i);")
         for field in proc['response']:
             field_type = field['type']
             if field_type == 'string':
-                lines.append(f"                rpc_result_push_string(response[i].{field['name']}, reply_msg);")
+                lines.append(f"                rpc_result_push_string(response[i].{field['name']}, reply);")
             else:
                 c_type = get_c_type(field_type)
                 if c_type in ['int32_t', 'int16_t', 'int8_t']:
@@ -418,9 +416,8 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
                     push_func = 'rpc_result_push_double'
                 else:
                     push_func = 'rpc_result_push_int32'
-                lines.append(f"                {push_func}(response[i].{field['name']}, reply_msg);")
-        lines.append("                reply->length += be16toh(reply_msg->reply.data_len);")
-        lines.append("                csp_send(global_rpc_server->conn, reply);")
+                lines.append(f"                {push_func}(response[i].{field['name']}, reply);")
+        lines.append("                rpc_send_reply(global_rpc_server->conn, reply);")
         lines.append("            }")
         lines.append("            break;")
         lines.append("        }")

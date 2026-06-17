@@ -100,35 +100,32 @@ void rpc_result_pop_buffer(uint8_t *value, uint16_t *len, rpc_msg_t *msg) {
     reply->data_len += *len;
 }
 
-
-#define RPC_HANDLE_SERVER_IMPL(type, name) \
-    type rpc_request_pop_##name(rpc_msg_t *msg) { \
-        rpc_call_t *call = &msg->call; \
-        uint16_t data_len = be16toh(call->data_len); \
-        type value; \
-        memcpy(&value, &call->data[data_len], sizeof(type)); \
-        data_len += sizeof(type); \
-        call->data_len = htobe16(data_len); \
-        return value; \
-    } \
+#define RPC_HANDLE_SERVER_IMPL(type, name, size) \
     void rpc_result_push_##name(type value, rpc_msg_t *msg) { \
         rpc_reply_t *reply = &msg->reply; \
-        uint16_t data_len = be16toh(reply->data_len); \
-        memcpy(&reply->data[data_len], &value, sizeof(type)); \
-        data_len += sizeof(type); \
-        reply->data_len = htobe16(data_len); \
+        value = htobe##size(value); \
+        memcpy(&reply->data[reply->data_len], &value, sizeof(type)); \
+        reply->data_len += sizeof(type); \
+    } \
+    type rpc_request_pop_##name(rpc_msg_t *msg) { \
+        rpc_call_t *call = &msg->call; \
+        type value; \
+        memcpy(&value, &call->data[call->data_len], sizeof(type)); \
+        value = be##size##toh(value); \
+        call->data_len += sizeof(type); \
+        return value; \
     }
 
-RPC_HANDLE_SERVER_IMPL(uint8_t, uint8)
-RPC_HANDLE_SERVER_IMPL(int8_t, int8)
-RPC_HANDLE_SERVER_IMPL(uint16_t, uint16)
-RPC_HANDLE_SERVER_IMPL(int16_t, int16)
-RPC_HANDLE_SERVER_IMPL(uint32_t, uint32)
-RPC_HANDLE_SERVER_IMPL(int32_t, int32)
-RPC_HANDLE_SERVER_IMPL(uint64_t, uint64)
-RPC_HANDLE_SERVER_IMPL(int64_t, int64)
-RPC_HANDLE_SERVER_IMPL(float, float)
-RPC_HANDLE_SERVER_IMPL(double, double)
+RPC_HANDLE_SERVER_IMPL(uint8_t, uint8, 8)
+RPC_HANDLE_SERVER_IMPL(int8_t, int8, 8)
+RPC_HANDLE_SERVER_IMPL(uint16_t, uint16, 16)
+RPC_HANDLE_SERVER_IMPL(int16_t, int16, 16)
+RPC_HANDLE_SERVER_IMPL(uint32_t, uint32, 32)
+RPC_HANDLE_SERVER_IMPL(int32_t, int32, 32)
+RPC_HANDLE_SERVER_IMPL(uint64_t, uint64, 64)
+RPC_HANDLE_SERVER_IMPL(int64_t, int64, 64)
+RPC_HANDLE_SERVER_IMPL(float, float, 32)
+RPC_HANDLE_SERVER_IMPL(double, double, 64)
 #undef RPC_HANDLE_SERVER_IMPL
 
 void rpc_request_pop_string(char *value, rpc_msg_t *msg) {
@@ -271,23 +268,24 @@ int rpc_client_init(rpc_client_t *me) {
     return RPC_STATUS_OK;
 }
 
-csp_packet_t * rpc_result_prepare(rpc_msg_t *msg) {
+rpc_msg_t * rpc_result_prepare(rpc_msg_t *call, uint32_t amount, uint32_t idx) {
 
-    csp_packet_t *packet;
-
-    packet = csp_buffer_get(0);
+    csp_packet_t *packet = csp_buffer_get(0);
+    rpc_msg_t *reply = (rpc_msg_t *)packet->data;
     if (packet) {
-        rpc_msg_t *reply_msg = (rpc_msg_t *)packet->data;
-        reply_msg->type = RPC_MSG_REPLY;
-        reply_msg->version = RPC_VERSION;
-        reply_msg->xid = msg->xid;
-        reply_msg->reply.data_len = htobe32(0);
-        reply_msg->reply.amount = htobe32(0);
-        reply_msg->reply.idx = htobe32(0);
-        packet->length = sizeof(reply_msg->type) + sizeof(reply_msg->version) + sizeof(reply_msg->xid) + sizeof(reply_msg->reply);
+        reply->type = RPC_MSG_REPLY;
+        reply->version = RPC_VERSION;
+        reply->xid = call->xid;
+        reply->reply.data_len = htobe32(0);
+        reply->reply.amount = htobe32(0);
+        reply->reply.idx = htobe32(0);
+        packet->length = sizeof(reply->type) + sizeof(reply->version) + sizeof(reply->xid) + sizeof(reply->reply);
     }
 
-    return packet;
+    reply->reply.amount = htobe32(amount);
+    reply->reply.idx = htobe32(idx);
+
+    return reply;
 }
 
 static const rpc_program_t * lookup_program_from_id(rpc_module_t *module, uint32_t id) {
@@ -305,14 +303,13 @@ static const rpc_program_t * lookup_program_from_id(rpc_module_t *module, uint32
     return program;
 }
 
-static csp_packet_t * rpc_handle_msg(csp_packet_t *packet) {
+static void rpc_handle_msg(csp_packet_t *packet) {
 
     rpc_msg_t *req_msg = (rpc_msg_t *)packet->data;
-    csp_packet_t *reply = NULL;
 
     if (req_msg->version != RPC_VERSION) {
         RPC_ERR("RPC-S: Error, wrong RPC version in message.\n");
-        return NULL;
+        return;
     }
 
     switch (req_msg->type) {
@@ -340,10 +337,14 @@ static csp_packet_t * rpc_handle_msg(csp_packet_t *packet) {
 
 }
 
-void rpc_set_reply_header(rpc_reply_t *reply, uint32_t lastidx, uint32_t idx) {
+void rpc_send_reply(csp_conn_t *conn, rpc_msg_t *reply) {
 
-    reply->amount = htobe32(lastidx);
-    reply->idx = htobe32(idx);
+    csp_packet_t *packet = (csp_packet_t *)((uint8_t*)reply - offsetof(csp_packet_t, data));
+
+    packet->length += reply->reply.data_len;
+    reply->reply.data_len = htobe16(reply->reply.data_len);
+
+    csp_send(conn, packet);
 }
 
 static int rpc_start_server(rpc_server_t *me) {
@@ -405,12 +406,7 @@ static bool rpc_handle_connection(rpc_server_t *me) {
 
     RPC_DBG("RPC-S: Handle message\n");
     /* Handle the RPC request (call) and send the reply */
-    csp_packet_t *reply = NULL;
-    reply = rpc_handle_msg(request);
-    if (reply) {
-        RPC_DBG("RPC-S: Send reply\n");
-        csp_send(global_rpc_server->conn, reply);
-    }
+    rpc_handle_msg(request);
 
     /* Free the request packet */
     csp_buffer_free(request);
