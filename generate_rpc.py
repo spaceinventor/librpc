@@ -454,29 +454,24 @@ def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str =
     with open(common_header, 'w') as f:
         f.write(generate_common_header(spec))
     shutil.copy(common_header, output_dir_header)
-    print(f"Generated: {common_header}")
 
     if mode in ('client', 'both'):
         client_header = os.path.join(output_dir, f"rpc_{program}_client.h")
         with open(client_header, 'w') as f:
             f.write(generate_client_header(spec))
         shutil.copy(client_header, output_dir_header)
-        print(f"Generated: {client_header}")
         client_file = os.path.join(output_dir, f"rpc_{program}_client.c")
         with open(client_file, 'w') as f:
             f.write(generate_client_implementation(spec))
-        print(f"Generated: {client_file}")
     
     if mode in ('server', 'both'):
         server_header = os.path.join(output_dir, f"rpc_{program}_server.h")
         with open(server_header, 'w') as f:
             f.write(generate_server_header(spec))
         shutil.copy(server_header, output_dir_header)
-        print(f"Generated: {server_header}")
         server_file = os.path.join(output_dir, f"rpc_{program}_server.c")
         with open(server_file, 'w') as f:
             f.write(generate_server_implementation(spec))
-        print(f"Generated: {server_file}")
 
 
 if __name__ == "__main__":
