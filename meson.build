@@ -6,9 +6,15 @@ subdir('src')
 
 gen_doc = find_program('gen-sidoc', required: false)
 
-gen_rpc_server = generator(find_program('python3'), arguments: ['./../lib/rpc/generate_rpc.py', '@INPUT@', '@BUILD_DIR@', 'server'], output: ['rpc_@BASENAME@_server.c', 'rpc_@BASENAME@_server.h', 'rpc_@BASENAME@.h'])
-gen_rpc_client = generator(find_program('python3'), arguments: ['./../lib/rpc/generate_rpc.py', '@INPUT@', '@BUILD_DIR@', 'client'], output: ['rpc_@BASENAME@_client.c', 'rpc_@BASENAME@_client.h', 'rpc_@BASENAME@.h'])
-gen_rpc_both = generator(find_program('python3'), arguments: ['./../lib/rpc/generate_rpc.py', '@INPUT@', '@BUILD_DIR@', 'both'], output: ['rpc_@BASENAME@_server.c', 'rpc_@BASENAME@_server.h', 'rpc_@BASENAME@_client.c', 'rpc_@BASENAME@_client.h', 'rpc_@BASENAME@.h'])
+gen_args = ['./../lib/rpc/generate_rpc.py', '@INPUT@', '@BUILD_DIR@']
+
+if get_option('debugprint') == true
+    gen_args += ['debug']
+endif
+
+gen_rpc_server = generator(find_program('python3'), arguments: gen_args + ['server'], output: ['rpc_@BASENAME@_server.c', 'rpc_@BASENAME@_server.h', 'rpc_@BASENAME@.h'])
+gen_rpc_client = generator(find_program('python3'), arguments: gen_args + ['client'], output: ['rpc_@BASENAME@_client.c', 'rpc_@BASENAME@_client.h', 'rpc_@BASENAME@.h'])
+gen_rpc_both = generator(find_program('python3'), arguments: gen_args + ['both'], output: ['rpc_@BASENAME@_server.c', 'rpc_@BASENAME@_server.h', 'rpc_@BASENAME@_client.c', 'rpc_@BASENAME@_client.h', 'rpc_@BASENAME@.h'])
 
 if gen_doc.found()
   doc_out = meson.current_build_dir() / '@OUTPUT@'

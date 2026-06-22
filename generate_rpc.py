@@ -78,6 +78,28 @@ def to_function_name(program: str, procedure: str, suffix: str = '') -> str:
     return f"{base}_{suffix}" if suffix else base
 
 
+def get_debug_printf_format(json_type: str) -> str:
+    """Return a printf format fragment for debug output of a JSON5 type."""
+    mapping = {
+        'u8': '%"PRIu8"',
+        'u16': '%"PRIu16"',
+        'u32': '%"PRIu32"',
+        'u64': '%"PRIu64"',
+        'i8': '%"PRId8"',
+        'i16': '%"PRId16"',
+        'i32': '%"PRId32"',
+        'i64': '%"PRId64"',
+        'x8': '0x%"PRIx8"',
+        'x16': '0x%"PRIx16"',
+        'x32': '0x%"PRIx32"',
+        'x64': '0x%"PRIx64"',
+        'f32': '%f',
+        'f64': '%f',
+        'string': '%s',
+    }
+    return mapping.get(json_type, '%"PRIu32')
+
+
 def generate_common_header(spec: Dict[str, Any]) -> str:
     """Generate the shared common header file content."""
     program = spec['program']
@@ -186,7 +208,7 @@ def generate_server_header(spec: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def generate_client_implementation(spec: Dict[str, Any]) -> str:
+def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) -> str:
     """Generate the client-side C implementation file content."""
     program = spec['program']
     procedures = spec['procedures']
@@ -196,7 +218,9 @@ def generate_client_implementation(spec: Dict[str, Any]) -> str:
     lines.append("#include <rpc_client.h>")
     lines.append("#include <string.h>")
     lines.append("")
-    
+    if debug:
+        lines.append("#define RPC_DEBUG")
+        lines.append("")
     # Init functions
     for proc in procedures:
         proc_name = proc['name']
@@ -333,7 +357,7 @@ def generate_client_implementation(spec: Dict[str, Any]) -> str:
 
 
 
-def generate_server_implementation(spec: Dict[str, Any]) -> str:
+def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) -> str:
     """Generate the server-side C implementation file content."""
     program = spec['program']
     procedures = spec['procedures']
@@ -341,7 +365,10 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
     lines = []
     lines.append(f'#include "rpc_{program}_server.h"')
     lines.append('#include <endian.h>')
+    lines.append('#include <inttypes.h>')
     lines.append("#include <string.h>")
+    if debug:
+        lines.append('#include <stdio.h>')
     lines.append("")
     lines.append("/* Server Handler Dispatcher */")
     program_upper = to_macro_name(program)
@@ -392,6 +419,13 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
                     pop_func = 'rpc_request_pop_uint32'
                 lines.append(f"            request.{field['name']} = {pop_func}(call);")
         lines.append("")
+        if debug:
+            lines.append(f'            printf("RPC: Received {proc_upper} call\\n");')
+            for field in proc['request']:
+                fmt = get_debug_printf_format(field['type'])
+                name = field['name']
+                lines.append(f'            printf("RPC: {name}={fmt}\\n", request.{name});')
+            lines.append("")
         if maxresponses > 1:
             lines.append(f"            {to_function_name(program, proc_name, 'host')}(&request, response, &numresponses);")
             lines.append("")
@@ -400,6 +434,12 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
             lines.append(f"            {to_function_name(program, proc_name, 'host')}(&request, response);")
         lines.append("")
         lines.append("            for (uint32_t i = 0; i < numresponses; i++) {")
+        if debug:
+            lines.append(f'                printf("RPC: Sending {proc_upper} response idx=%"PRIu32"\\n", i);')
+            for field in proc['response']:
+                fmt = get_debug_printf_format(field['type'])
+                name = field['name']
+                lines.append(f'                printf("RPC: response[%"PRIu32"].{name}={fmt}\\n", i, response[i].{name});')
         lines.append("                rpc_msg_t *reply = rpc_result_prepare(call, numresponses-1, i);")
         for field in proc['response']:
             field_type = field['type']
@@ -435,7 +475,7 @@ def generate_server_implementation(spec: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str = 'both'):
+def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str = 'both', debug: bool = False):
     """Generate C files from JSON5 specification."""
     # Parse JSON5 file
     with open(json_file, 'r') as f:
@@ -465,7 +505,7 @@ def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str =
         shutil.copy(client_header, output_dir_header)
         client_file = os.path.join(output_dir, f"rpc_{program}_client.c")
         with open(client_file, 'w') as f:
-            f.write(generate_client_implementation(spec))
+            f.write(generate_client_implementation(spec, debug))
     
     if mode in ('server', 'both'):
         server_header = os.path.join(output_dir, f"rpc_{program}_server.h")
@@ -474,31 +514,38 @@ def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str =
         shutil.copy(server_header, output_dir_header)
         server_file = os.path.join(output_dir, f"rpc_{program}_server.c")
         with open(server_file, 'w') as f:
-            f.write(generate_server_implementation(spec))
+            f.write(generate_server_implementation(spec, debug))
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 generate_rpc.py <json5_file> [output_dir] [mode]")
+        print("Usage: python3 generate_rpc.py <json5_file> [output_dir] [mode] [debug]")
         print("mode = client | server | both (default)")
+        print("debug = true | false (default)")
         sys.exit(1)
     
     json_file = sys.argv[1]
     output_dir = None
     mode = 'both'
-    if len(sys.argv) >= 3 and sys.argv[2] not in ('client', 'server', 'both'):
-        output_dir = sys.argv[2]
-    elif len(sys.argv) >= 3:
-        mode = sys.argv[2]
-    if len(sys.argv) >= 4:
-        mode = sys.argv[3]
-    
+    debug = False
+    for i in range(2, len(sys.argv)):
+        arg = sys.argv[i].lower()
+        if arg in ('client', 'server', 'both'):
+            mode = arg
+        elif arg == 'debug':
+            debug = True
+        else:
+            if output_dir is not None:
+                print(f"Error: Unrecognized argument: {sys.argv[i]}")
+                sys.exit(1)
+            output_dir = sys.argv[i]
+
     if not os.path.exists(json_file):
         print(f"Error: File not found: {json_file}")
         sys.exit(1)
-    
+
     try:
-        generate_files(json_file, output_dir, mode)
+        generate_files(json_file, output_dir, mode, debug)
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
