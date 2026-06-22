@@ -87,17 +87,6 @@ void rpc_result_pop_buffer(uint8_t *value, uint16_t *len, rpc_msg_t *msg) {
     reply->data_len += *len;
 }
 
-csp_conn_t *rpc_connect(uint16_t node) {
-
-    csp_conn_t *conn = csp_connect(CSP_PRIO_NORM, node, CSP_PORT_RPC_SERVER, 0, CSP_O_NONE);
-    if (!conn) {
-        RPC_ERR("RPC-C: Could not connect to RPC service on node %"PRIu16"\n", node);
-        return NULL;
-    }
-
-    return conn;
-}
-
 int rpc_disconnect(csp_conn_t *conn) {
 
     return csp_close(conn) == CSP_ERR_NONE ? RPC_STATUS_OK : RPC_STATUS_ERR_INVALID;

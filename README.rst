@@ -64,34 +64,6 @@ Framework API
 Client Side
 -----------
 
-**Initialization**
-
-.. code-block:: c
-
-    int rpc_init_client(rpc_client_t *me, 
-                       uint32_t nof_programs, rpc_program_t *programs,
-                       uint32_t nof_procedures, rpc_procedure_t *procedures);
-
-Initialize the RPC client with local program definitions and remote procedure discovery slots.
-
-**Connection and Remote Program Discovery**
-
-.. code-block:: c
-
-    int rpc_connect(rpc_client_t *me, uint16_t node);
-    int rpc_disconnect(rpc_client_t *me);
-    void rpc_list_remote_programs(rpc_client_t *me, uint16_t node);
-    rpc_program_t *rpc_register_remote_program(rpc_client_t *me, uint16_t node, uint32_t program_id);
-    rpc_procedure_t *rpc_register_remote_procedure(rpc_client_t *me, rpc_program_t *program, uint32_t procedure_id);
-
-**Remote Procedure Invocation**
-
-.. code-block:: c
-
-    int rpc_call_invoke(rpc_client_t *me, uint32_t program, uint32_t procedure, ...);
-
-Invoke a remote procedure with variadic argument list. Arguments and return pointers are passed in sequence.
-
 Server Side
 -----------
 
@@ -100,68 +72,8 @@ Server Side
 .. code-block:: c
 
     int rpc_start_server(rpc_server_t *me);
-    int rpc_stop_server(rpc_server_t *me);
 
-Start or stop the RPC server main loop.
-
-**Connection Handling**
-
-.. code-block:: c
-
-    bool rpc_waitfor_connections(rpc_server_t *me);
-    bool rpc_handle_connection(rpc_server_t *me);
-
-Poll for incoming connections and process requests.
-
-**Handler Callback**
-
-Server programs implement a handler callback:
-
-.. code-block:: c
-
-    typedef bool rpc_server_callback_t(uint32_t program, uint32_t procedure, 
-                                       rpc_msg_t *call, rpc_msg_t *reply, void *ctx);
-
-The handler receives the program/procedure IDs, incoming call message, outgoing reply message, and context data.
-
-Request/Response Serialization
--------------------------------
-
-**Extracting Request Parameters (Server-side)**
-
-.. code-block:: c
-
-    uint8_t    rpc_request_pop_uint8(rpc_msg_t *msg);
-    int8_t     rpc_request_pop_int8(rpc_msg_t *msg);
-    uint16_t   rpc_request_pop_uint16(rpc_msg_t *msg);
-    int16_t    rpc_request_pop_int16(rpc_msg_t *msg);
-    uint32_t   rpc_request_pop_uint32(rpc_msg_t *msg);
-    int32_t    rpc_request_pop_int32(rpc_msg_t *msg);
-    uint64_t   rpc_request_pop_uint64(rpc_msg_t *msg);
-    int64_t    rpc_request_pop_int64(rpc_msg_t *msg);
-    float      rpc_request_pop_float(rpc_msg_t *msg);
-    double     rpc_request_pop_double(rpc_msg_t *msg);
-    void       rpc_request_pop_string(char **value, rpc_msg_t *msg);
-    void       rpc_request_pop_buffer(uint8_t **value, uint16_t *len, rpc_msg_t *msg);
-
-Primitive types return values directly; strings and buffers use output pointers.
-
-**Sending Response Values (Server-side)**
-
-.. code-block:: c
-
-    void rpc_result_push_uint8(uint8_t value, rpc_msg_t *msg);
-    void rpc_result_push_int8(int8_t value, rpc_msg_t *msg);
-    void rpc_result_push_uint16(uint16_t value, rpc_msg_t *msg);
-    void rpc_result_push_int16(int16_t value, rpc_msg_t *msg);
-    void rpc_result_push_uint32(uint32_t value, rpc_msg_t *msg);
-    void rpc_result_push_int32(int32_t value, rpc_msg_t *msg);
-    void rpc_result_push_uint64(uint64_t value, rpc_msg_t *msg);
-    void rpc_result_push_int64(int64_t value, rpc_msg_t *msg);
-    void rpc_result_push_float(float value, rpc_msg_t *msg);
-    void rpc_result_push_double(double value, rpc_msg_t *msg);
-    void rpc_result_push_string(const char *value, rpc_msg_t *msg);
-    void rpc_result_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg);
+Start the RPC server main loop.
 
 Error Handling
 ==============
@@ -327,7 +239,8 @@ The generated ``rpc_dsu_server.h`` declares:
 
 .. code-block:: c
 
-    void rpc_dsu_peek_element_host(const rpc_dsu_peek_element_request_t *request,
+    void rpc_dsu_peek_element_host(uint16_t node, uint32_t timeout,
+                                   const rpc_dsu_peek_element_request_t *request,
                                    rpc_dsu_peek_element_response_t *response);
 
 You implement this function in your server code to handle the RPC call.
@@ -346,7 +259,7 @@ You implement this function in your server code to handle the RPC call.
 Meson Build Integration
 -----------------------
 
-The build system includes an automatic code generation step via Meson ``custom_target``:
+The build system includes an automatic code generation step via Meson ``generator`` target. When you run the build, the generator will process your JSON5 files and produce the necessary C source and header files before compilation.:
 
 .. code-block:: bash
 

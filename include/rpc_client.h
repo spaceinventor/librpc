@@ -2,7 +2,6 @@
 
 #include "rpc.h"
 
-extern csp_conn_t *rpc_connect(uint16_t node);
 extern int rpc_build_request(uint16_t node, uint32_t program, uint32_t procedure, csp_conn_t ** conn, rpc_msg_t **req_msg);
 extern void rpc_send(csp_conn_t *conn, rpc_msg_t *msg);
 extern void rpc_buffer_free(rpc_msg_t *msg);
