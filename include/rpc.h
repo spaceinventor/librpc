@@ -40,6 +40,7 @@ extern "C" {
 #define RPC_STATUS_ERR_NOT_FOUND -5
 #define RPC_STATUS_ERR_NOT_SUPPORTED -6
 #define RPC_STATUS_ERR_INUSE -7
+#define RPC_STATUS_EMPTYRESPONSE -8
 
 typedef enum rpc_msg_type_e {
     RPC_MSG_CALL = 0,

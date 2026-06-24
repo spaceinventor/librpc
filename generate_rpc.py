@@ -440,7 +440,7 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
                 fmt = get_debug_printf_format(field['type'])
                 name = field['name']
                 lines.append(f'                printf("RPC: response[%"PRIu32"].{name}={fmt}\\n", i, response[i].{name});')
-        lines.append("                rpc_msg_t *reply = rpc_result_prepare(call, numresponses-1, i);")
+        lines.append("                rpc_msg_t *reply = rpc_result_prepare(call, numresponses, i);")
         for field in proc['response']:
             field_type = field['type']
             if field_type == 'string':

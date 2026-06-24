@@ -126,7 +126,7 @@ void rpc_send(csp_conn_t *conn, rpc_msg_t *msg) {
     csp_send(conn, packet);
 }
 
-int rpc_get_reply(csp_conn_t *conn, rpc_msg_t **msg, uint32_t maxresponses, uint32_t extected_idx, uint32_t timeout) {
+int rpc_get_reply(csp_conn_t *conn, rpc_msg_t **msg, uint32_t maxresponses, uint32_t expected_idx, uint32_t timeout) {
 
     csp_packet_t *reply = csp_read(conn, timeout);
     if (!reply) {
@@ -138,9 +138,14 @@ int rpc_get_reply(csp_conn_t *conn, rpc_msg_t **msg, uint32_t maxresponses, uint
     (*msg)->reply.idx = be32toh((*msg)->reply.idx);
     (*msg)->reply.data_len = 0;
 
-    if ((*msg)->reply.idx >= maxresponses 
-        || (*msg)->reply.idx > (*msg)->reply.amount 
-        || (*msg)->reply.idx != extected_idx) {
+    if ((*msg)->reply.amount == 0) {
+        csp_buffer_free(reply);
+        return RPC_STATUS_EMPTYRESPONSE;
+    }
+
+    if ((*msg)->reply.idx >= maxresponses
+        || (*msg)->reply.idx >= (*msg)->reply.amount
+        || (*msg)->reply.idx != expected_idx) {
         csp_buffer_free(reply);
         return RPC_STATUS_ERR_INVALID;
     }
