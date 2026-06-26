@@ -233,13 +233,17 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         lines.append(f"{request_typedef} {to_function_name(program, proc_name, 'init')}({init_params}) {{")
         lines.append(f"    {request_typedef} request;")
         for field in non_default_fields:
-            lines.append(f"    request.{field['name']} = {field['name']};")
+                if field['type'] == 'string':
+                    lines.append(f"    strncpy(request.{field['name']}, {field['name']}, sizeof(request.{field['name']}));")
+                    lines.append(f"    request.{field['name']}[sizeof(request.{field['name']}) - 1] = 0;")
+                else:
+                    lines.append(f"    request.{field['name']} = {field['name']};")
         for field in proc['request']:
             if 'default' in field:
                 default_value = render_c_default(field)
                 if field['type'] == 'string':
                     lines.append(f"    strncpy(request.{field['name']}, {default_value}, sizeof(request.{field['name']}));")
-                    lines.append(f"    request.{field['name']}[sizeof(request.{field['name']}) - 1] = '\0';")
+                    lines.append(f"    request.{field['name']}[sizeof(request.{field['name']}) - 1] = 0;")
                 else:
                     lines.append(f"    request.{field['name']} = {default_value};")
         lines.append("    return request;")
@@ -392,7 +396,7 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
             field_type = field['type']
             if field_type == 'string':
                 lines.append(f"            char *{field['name']}_ptr = request.{field['name']};")
-                lines.append(f"            rpc_request_pop_string(&{field['name']}_ptr, call);")
+                lines.append(f"            rpc_request_pop_string({field['name']}_ptr, call);")
             else:
                 c_type = get_c_type(field_type)
                 if c_type == 'int32_t':
