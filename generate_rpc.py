@@ -217,10 +217,9 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
     lines.append(f'#include "rpc_{program}.h"')
     lines.append("#include <rpc_client.h>")
     lines.append("#include <string.h>")
-    lines.append("")
     if debug:
-        lines.append("#define RPC_DEBUG")
-        lines.append("")
+        lines.append("#include <stdio.h>")
+    lines.append("")
     # Init functions
     for proc in procedures:
         proc_name = proc['name']
@@ -274,6 +273,13 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         lines.append("    }")
         lines.append("")
         lines.append("    /* Add request fields */")
+        if debug:
+            lines.append(f'    printf("RPC: Sending {proc_upper} call\\n");')
+            for field in proc['request']:
+                fmt = get_debug_printf_format(field['type'])
+                name = field['name']
+                lines.append(f'    printf("RPC: {name}={fmt}\\n", request->{name});')
+            lines.append("")
         for field in proc['request']:
             field_type = field['type']
             if field_type == 'string':
@@ -345,6 +351,13 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
                     pop_func = 'rpc_result_pop_uint32'
                 lines.append(f"        response[idx].{field['name']} = {pop_func}(reply_msg);")
         lines.append("")
+        if debug:
+            lines.append(f'        printf("RPC: Receiving {proc_upper} response idx=%"PRIu32"\\n", idx);')
+            for field in proc['response']:
+                fmt = get_debug_printf_format(field['type'])
+                name = field['name']
+                lines.append(f'        printf("RPC: response[%"PRIu32"].{name}={fmt}\\n", idx, response[idx].{name});')
+            lines.append("")
         lines.append("        rpc_buffer_free(reply_msg);")
         lines.append("        idx++;")
         lines.append("")
