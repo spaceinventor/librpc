@@ -6,7 +6,7 @@ subdir('src')
 
 gen_doc = find_program('gen-sidoc', required: false)
 
-gen_args = ['./../lib/rpc/generate_rpc.py', '@INPUT@', '@BUILD_DIR@']
+gen_args = [files('generate_rpc.py').get(0).full_path(), '@INPUT@', '@BUILD_DIR@']
 
 if get_option('debugprint') == true
     gen_args += ['debug']
