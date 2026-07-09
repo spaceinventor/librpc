@@ -32,6 +32,7 @@ TYPE_MAPPING = {
     'f32': 'float',
     'f64': 'double',
     'string': 'char *',
+    'enum': 'enum',
 }
 
 DEFAULT_STRING_MAX = 256
@@ -44,13 +45,16 @@ def get_c_type(json_type: str) -> str:
     return TYPE_MAPPING[json_type]
 
 
-def get_field_declaration(field: Dict[str, Any], context: str) -> str:
+def get_field_declaration(field: Dict[str, Any], program: str) -> str:
     """Return a C field declaration for a given JSON5 field."""
     json_type = field['type']
     name = field['name']
     if json_type == 'string':
         max_length = field.get('max_length', field.get('max_len', DEFAULT_STRING_MAX))
         return f"char {name}[{max_length}]"
+    elif json_type == 'enum':
+        enum_name = field['enum_name']
+        return f"rpc_{program}_{enum_name} {name}"
     return f"{get_c_type(json_type)} {name}"
 
 
@@ -78,6 +82,13 @@ def to_function_name(program: str, procedure: str, suffix: str = '') -> str:
     return f"{base}_{suffix}" if suffix else base
 
 
+def get_enum_size(spec: Dict[str, Any], field: Dict[str, Any]) -> str:
+    enum_name = field['enum_name']
+    enums = spec['enums']
+    enum_item = next((item for item in enums if item["name"] == enum_name))
+    return enum_item['size']
+
+
 def get_debug_printf_format(json_type: str) -> str:
     """Return a printf format fragment for debug output of a JSON5 type."""
     mapping = {
@@ -97,7 +108,126 @@ def get_debug_printf_format(json_type: str) -> str:
         'f64': '%f',
         'string': '%s',
     }
-    return mapping.get(json_type, '%"PRIu32')
+    return mapping.get(json_type, '%"PRIu32"')
+
+
+def generate_common_header_defines(spec: Dict[str, Any], lines: List, program: str):
+    """Generate defines.
+
+       Exampel of json format:
+           defines: [
+                {
+                    name: 'route_xtx',
+                    value: '0',
+                    description: 'Route the data via the XTX X-band radio',
+                },
+                {
+                    name: 'route_csp',
+                    value: '1',
+                    description: 'Route the data via CSP',
+                },
+                {
+                    name: '',
+                },
+                {
+                    name: 'result_success',
+                    value: '0',
+                },
+                {
+                    name: 'result_fail',
+                    value: '1',
+                },
+           ],
+
+       C code generated:
+           /* Route the data via the XTX X-band radio */
+           #define RPC_XTX_ROUTE_XTX 0
+           /* Route the data via CSP */
+           #define RPC_XTX_ROUTE_CSP 1
+
+           #define RPC_XTX_RESULT_SUCCESS 0
+           #define RPC_XTX_RESULT_FAIL 1
+    """
+
+    if 'defines' not in spec.keys():
+        return
+
+    program_upper = to_macro_name(program)
+    defines = spec['defines']
+    lines.append("")
+    for define in defines:
+        define_name_upper = to_macro_name(define['name'])
+        if len(define_name_upper) == 0:
+            lines.append("")
+            continue
+        if 'description' in define.keys():
+            lines.append(f"/* {define['description']} */")
+        define_value = define['value']
+        lines.append(f"#define RPC_{program_upper}_{define_name_upper} {define_value}")
+
+
+def generate_common_header_enums(spec: Dict[str, Any], lines: List, program: str):
+    """Generate enums.
+
+       Exampel of json format:
+           enums: [
+               {
+                   name: 'route_t',
+                   size: 'u8',
+                   items: [
+                       {
+                           name: 'route_xtx',
+                           value: '0',
+                           description: 'Route the data via the XTX X-band radio',
+                       },
+                       {
+                           name: 'route_csp',
+                           description: 'Route the data via CSP',
+                       },
+                   ],
+               },
+           ],
+
+       C code generated:
+           typedef enum {
+               /* Route the data via the XTX X-band radio */
+               RPC_XTX_ROUTE_XTX = 0,
+               /* Route the data via CSP */
+               RPC_XTX_ROUTE_CSP,
+           } rpc_xtx_route_t;
+
+       Using the enum:
+           {
+               name: 'route',
+               description: 'XTX:0, CSP:1',
+               type: 'enum',
+               enum_name: 'route_t',
+           },
+
+       C code generated:
+           /* XTX:0, CSP:1 */
+           rpc_xtx_route_t route;
+    """
+
+    if 'enums' not in spec.keys():
+        return
+
+    program_upper = to_macro_name(program)
+    enums = spec['enums']
+    for enum in enums:
+        lines.append("")
+        lines.append("typedef enum {")
+        for item in enum['items']:
+            if 'description' in item.keys():
+                lines.append(f"    /* {item['description']} */")
+            val_name_upper = to_macro_name(item['name'])
+            if 'value' in item.keys():
+                val = item['value']
+                lines.append(f"    RPC_{program_upper}_{val_name_upper} = {val},")
+            else:
+                lines.append(f"    RPC_{program_upper}_{val_name_upper},")
+        enum_name = enum['name']
+        lines.append(f"}} rpc_{program}_{enum_name};")
 
 
 def generate_common_header(spec: Dict[str, Any]) -> str:
@@ -123,6 +253,10 @@ def generate_common_header(spec: Dict[str, Any]) -> str:
         proc_upper = to_macro_name(proc['name'])
         proc_index = proc['index']
         lines.append(f"#define RPC_{program_upper}_{proc_upper} {proc_index}")
+
+    generate_common_header_defines(spec, lines, program)
+    generate_common_header_enums(spec, lines, program)
+
     lines.append("")
     lines.append("/* Request and Response Structures */")
     for proc in procedures:
@@ -130,17 +264,27 @@ def generate_common_header(spec: Dict[str, Any]) -> str:
         request_typedef = f"rpc_{program}_{proc_name}_request_t"
         lines.append(f"typedef struct {{")
         for field in proc['request']:
-            lines.append(f"    {get_field_declaration(field, 'request')};")
+            if 'description' in field.keys():
+                lines.append(f"    /* {field['description']} */")
+            lines.append(f"    {get_field_declaration(field, program)};")
         lines.append(f"}} {request_typedef};")
         lines.append("")
         response_typedef = f"rpc_{program}_{proc_name}_response_t"
         lines.append(f"typedef struct {{")
         for field in proc['response']:
-            lines.append(f"    {get_field_declaration(field, 'response')};")
+            lines.append(f"    {get_field_declaration(field, program)};")
         lines.append(f"}} {response_typedef};")
         lines.append("")
     lines.append(f"#endif /* {guard} */")
     return "\n".join(lines)
+
+
+def get_param_type(field: Dict[str, Any], program: str) -> str:
+    if field['type'] == 'enum':
+        enum_name = field['enum_name']
+        return f"rpc_{program}_{enum_name}"
+    else:
+        return get_c_type(field['type'])
 
 
 def generate_client_header(spec: Dict[str, Any]) -> str:
@@ -164,7 +308,7 @@ def generate_client_header(spec: Dict[str, Any]) -> str:
         response_typedef = f"rpc_{program}_{proc_name}_response_t"
         non_default_fields = [f for f in proc['request'] if 'default' not in f]
         if non_default_fields:
-            init_params = ", ".join([f"{get_c_type(f['type'])} {f['name']}" for f in non_default_fields])
+            init_params = ", ".join([f"{get_param_type(f, program)} {f['name']}" for f in non_default_fields])
             lines.append(f"{request_typedef} {to_function_name(program, proc_name, 'init')}({init_params});")
         else:
             lines.append(f"{request_typedef} {to_function_name(program, proc_name, 'init')}(void);")
@@ -226,7 +370,7 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         request_typedef = f"rpc_{program}_{proc_name}_request_t"
         non_default_fields = [f for f in proc['request'] if 'default' not in f]
         if non_default_fields:
-            init_params = ", ".join([f"{get_c_type(f['type'])} {f['name']}" for f in non_default_fields])
+            init_params = ", ".join([f"{get_param_type(f, program)} {f['name']}" for f in non_default_fields])
         else:
             init_params = "void"
         lines.append(f"{request_typedef} {to_function_name(program, proc_name, 'init')}({init_params}) {{")
@@ -276,7 +420,11 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         if debug:
             lines.append(f'    printf("RPC: Sending {proc_upper} call\\n");')
             for field in proc['request']:
-                fmt = get_debug_printf_format(field['type'])
+                if field['type'] == 'enum':
+                    enum_size = get_enum_size(spec, field)
+                    fmt = get_debug_printf_format(enum_size)
+                else:
+                    fmt = get_debug_printf_format(field['type'])
                 name = field['name']
                 lines.append(f'    printf("RPC: {name}={fmt}\\n", request->{name});')
             lines.append("")
@@ -285,7 +433,12 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
             if field_type == 'string':
                 lines.append(f"    rpc_request_push_string(request->{field['name']}, request_msg);")
             else:
-                c_type = get_c_type(field_type)
+                if field_type == 'enum':
+                    enum_size = get_enum_size(spec, field)
+                    c_type = get_c_type(enum_size)
+                else:
+                    c_type = get_c_type(field_type)
+
                 if c_type == 'int32_t':
                     push_func = 'rpc_request_push_int32'
                 elif c_type == 'int16_t':
@@ -326,7 +479,12 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
             if field_type == 'string':
                 lines.append(f"        rpc_result_pop_string(response[idx].{field['name']}, reply_msg);")
             else:
-                c_type = get_c_type(field_type)
+                if field_type == 'enum':
+                    enum_size = get_enum_size(spec, field)
+                    c_type = get_c_type(enum_size)
+                else:
+                    c_type = get_c_type(field_type)
+
                 if c_type == 'int32_t':
                     pop_func = 'rpc_result_pop_int32'
                 elif c_type == 'int16_t':
@@ -354,7 +512,11 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         if debug:
             lines.append(f'        printf("RPC: Receiving {proc_upper} response idx=%"PRIu32"\\n", idx);')
             for field in proc['response']:
-                fmt = get_debug_printf_format(field['type'])
+                if field['type'] == 'enum':
+                    enum_size = get_enum_size(spec, field)
+                    fmt = get_debug_printf_format(enum_size)
+                else:
+                    fmt = get_debug_printf_format(field['type'])
                 name = field['name']
                 lines.append(f'        printf("RPC: response[%"PRIu32"].{name}={fmt}\\n", idx, response[idx].{name});')
             lines.append("")
@@ -411,7 +573,12 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
                 lines.append(f"            char *{field['name']}_ptr = request.{field['name']};")
                 lines.append(f"            rpc_request_pop_string({field['name']}_ptr, call);")
             else:
-                c_type = get_c_type(field_type)
+                if field_type == 'enum':
+                    enum_size = get_enum_size(spec, field)
+                    c_type = get_c_type(enum_size)
+                else:
+                    c_type = get_c_type(field_type)
+
                 if c_type == 'int32_t':
                     pop_func = 'rpc_request_pop_int32'
                 elif c_type == 'int16_t':
@@ -439,7 +606,11 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
         if debug:
             lines.append(f'            printf("RPC: Received {proc_upper} call\\n");')
             for field in proc['request']:
-                fmt = get_debug_printf_format(field['type'])
+                if field['type'] == 'enum':
+                    enum_size = get_enum_size(spec, field)
+                    fmt = get_debug_printf_format(enum_size)
+                else:
+                    fmt = get_debug_printf_format(field['type'])
                 name = field['name']
                 lines.append(f'            printf("RPC: {name}={fmt}\\n", request.{name});')
             lines.append("")
@@ -454,7 +625,11 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
         if debug:
             lines.append(f'                printf("RPC: Sending {proc_upper} response idx=%"PRIu32"\\n", i);')
             for field in proc['response']:
-                fmt = get_debug_printf_format(field['type'])
+                if field['type'] == 'enum':
+                    enum_size = get_enum_size(spec, field)
+                    fmt = get_debug_printf_format(enum_size)
+                else:
+                    fmt = get_debug_printf_format(field['type'])
                 name = field['name']
                 lines.append(f'                printf("RPC: response[%"PRIu32"].{name}={fmt}\\n", i, response[i].{name});')
         lines.append("                rpc_msg_t *reply = rpc_result_prepare(call, numresponses, i);")
@@ -463,7 +638,12 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
             if field_type == 'string':
                 lines.append(f"                rpc_result_push_string(response[i].{field['name']}, reply);")
             else:
-                c_type = get_c_type(field_type)
+                if field_type == 'enum':
+                    enum_size = get_enum_size(spec, field)
+                    c_type = get_c_type(enum_size)
+                else:
+                    c_type = get_c_type(field_type)
+
                 if c_type == 'int32_t':
                     push_func = 'rpc_result_push_int32'
                 elif c_type == 'int16_t':
