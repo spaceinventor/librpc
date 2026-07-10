@@ -464,10 +464,18 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
                 lines.append(f"                rpc_result_push_string(response[i].{field['name']}, reply);")
             else:
                 c_type = get_c_type(field_type)
-                if c_type in ['int32_t', 'int16_t', 'int8_t']:
+                if c_type == 'int32_t':
                     push_func = 'rpc_result_push_int32'
-                elif c_type in ['uint32_t', 'uint16_t', 'uint8_t']:
+                elif c_type == 'int16_t':
+                    push_func = 'rpc_result_push_int16'
+                elif c_type == 'int8_t':
+                    push_func = 'rpc_result_push_int8'
+                elif c_type == 'uint32_t':
                     push_func = 'rpc_result_push_uint32'
+                elif c_type == 'uint16_t':
+                    push_func = 'rpc_result_push_uint16'
+                elif c_type == 'uint8_t':
+                    push_func = 'rpc_result_push_uint8'
                 elif c_type == 'int64_t':
                     push_func = 'rpc_result_push_int64'
                 elif c_type == 'uint64_t':
