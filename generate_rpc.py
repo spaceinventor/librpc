@@ -214,8 +214,7 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
     procedures = spec['procedures']
     
     lines = []
-    lines.append(f'#include "rpc_{program}.h"')
-    lines.append("#include <rpc_client.h>")
+    lines.append(f'#include "rpc_{program}_client.h"')
     lines.append("#include <string.h>")
     if debug:
         lines.append("#include <stdio.h>")
