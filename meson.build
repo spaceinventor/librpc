@@ -1,4 +1,4 @@
-project('rpc', 'c', version: '1.1.0')
+project('rpc', 'c', version: '1.1.1')
 
 include = include_directories('include')
 
