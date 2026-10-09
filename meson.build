@@ -13,7 +13,7 @@ if get_option('debugprint') == true
 endif
 
 gen_rpc_server = generator(find_program('python3'), arguments: gen_args + ['server'], output: ['rpc_@BASENAME@_server.c', 'rpc_@BASENAME@_server.h', 'rpc_@BASENAME@.h'])
-gen_rpc_client = generator(find_program('python3'), arguments: gen_args + ['client'], output: ['rpc_@BASENAME@_client.c', 'rpc_@BASENAME@_client.h', 'rpc_@BASENAME@.h'])
+gen_rpc_client = generator(find_program('python3'), arguments: gen_args + ['client'], output: ['rpc_@BASENAME@_client.c', 'rpc_@BASENAME@_client.h'])
 gen_rpc_both = generator(find_program('python3'), arguments: gen_args + ['both'], output: ['rpc_@BASENAME@_server.c', 'rpc_@BASENAME@_server.h', 'rpc_@BASENAME@_client.c', 'rpc_@BASENAME@_client.h', 'rpc_@BASENAME@.h'])
 
 if gen_doc.found()
