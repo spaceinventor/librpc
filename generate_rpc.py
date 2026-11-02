@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-RPC Code Generator: Generates C code from JSON5 interface definitions.
+RPC Code Generator: Generates C code from JSON interface definitions.
 
-Converts JSON5 interface specifications into C header and implementation files
+Converts JSON interface specifications into C header and implementation files
 with request/response structs, client functions, and server handlers.
 """
 
-import json5
+import json
 import os
 import sys
 from pathlib import Path
@@ -15,7 +15,7 @@ import shutil
 
 import json
 
-# Type mapping from JSON5 to C primitives
+# Type mapping from JSON to C primitives
 TYPE_MAPPING = {
     'u8': 'uint8_t',
     'u16': 'uint16_t',
@@ -38,14 +38,14 @@ DEFAULT_STRING_MAX = 256
 
 
 def get_c_type(json_type: str) -> str:
-    """Convert JSON5 type to C type."""
+    """Convert JSON type to C type."""
     if json_type not in TYPE_MAPPING:
         raise ValueError(f"Unknown type: {json_type}")
     return TYPE_MAPPING[json_type]
 
 
 def get_field_declaration(field: Dict[str, Any], context: str) -> str:
-    """Return a C field declaration for a given JSON5 field."""
+    """Return a C field declaration for a given JSON field."""
     json_type = field['type']
     name = field['name']
     if json_type == 'string':
@@ -79,7 +79,7 @@ def to_function_name(program: str, procedure: str, suffix: str = '') -> str:
 
 
 def get_debug_printf_format(json_type: str) -> str:
-    """Return a printf format fragment for debug output of a JSON5 type."""
+    """Return a printf format fragment for debug output of a JSON type."""
     mapping = {
         'u8': '%"PRIu8"',
         'u16': '%"PRIu16"',
@@ -493,10 +493,10 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
 
 
 def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str = 'both', debug: bool = False):
-    """Generate C files from JSON5 specification."""
-    # Parse JSON5 file
+    """Generate C files from JSON specification."""
+    # Parse JSON file
     with open(json_file, 'r') as f:
-        spec = json5.load(f)
+        spec = json.load(f)
     
     program = spec['program']
     
@@ -536,7 +536,7 @@ def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str =
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 generate_rpc.py <json5_file> [output_dir] [mode] [debug]")
+        print("Usage: python3 generate_rpc.py <json_file> [output_dir] [mode] [debug]")
         print("mode = client | server | both (default)")
         print("debug = true | false (default)")
         sys.exit(1)
