@@ -17,12 +17,16 @@
         memcpy(&call->data[call->data_len], &value, sizeof(type)); \
         call->data_len += sizeof(type); \
     } \
-    type rpc_result_pop_##name(rpc_msg_t *msg) { \
+    type rpc_result_pop_##name(rpc_msg_t *msg, uint16_t *offset) { \
         rpc_reply_t *reply = &msg->reply; \
         type value; \
-        memcpy(&value, &reply->data[reply->data_len], sizeof(type)); \
+        if (reply->data_len < sizeof(type)) { \
+            return 0; \
+        } \
+        memcpy(&value, &reply->data[*offset], sizeof(type)); \
         value = be##size##toh(value); \
-        reply->data_len += sizeof(type); \
+        reply->data_len -= sizeof(type); \
+        *offset += sizeof(type); \
         return value; \
     }
 
@@ -67,24 +71,44 @@ void rpc_request_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg)
     call->data_len += len;
 }
 
-void rpc_result_pop_string(char *value, rpc_msg_t *msg) {
+void rpc_result_pop_string(char *value, rpc_msg_t *msg, uint16_t *offset) {
 
     rpc_reply_t *reply = &msg->reply;
 
-    size_t len = strlen((char *)&reply->data[reply->data_len]);
-    strcpy(value, (char *)&reply->data[reply->data_len]);
+    if (reply->data_len == 0) {
+        value[0] = '\0';
+        return;
+    }
 
-    reply->data_len += len + 1;
+    size_t len = strnlen((char *)&reply->data[*offset], reply->data_len);
+    if (len == reply->data_len) {
+        /* Missing NULL termination */
+        value[0] = '\0';
+        reply->data_len = 0;
+        return;
+    }
+
+    strncpy(value, (char *)&reply->data[*offset], len);
+    value[len] = '\0';
+
+    *offset += (len + 1);
+    reply->data_len -= (len + 1);
 }
 
-void rpc_result_pop_buffer(uint8_t *value, uint16_t *len, rpc_msg_t *msg) {
+void rpc_result_pop_buffer(uint8_t *value, uint16_t *len, rpc_msg_t *msg, uint16_t *offset) {
 
     rpc_reply_t *reply = &msg->reply;
 
-    *len = rpc_result_pop_uint16(msg);
-    memcpy(value, &reply->data[reply->data_len], *len);
+    *len = rpc_result_pop_uint16(msg, offset);
+    if (reply->data_len < *len) {
+        reply->data_len = 0;
+        *len = 0;
+        return;
+    }
+    memcpy(value, &reply->data[*offset], *len);
 
-    reply->data_len += *len;
+    reply->data_len -= *len;
+    *offset += *len;
 }
 
 int rpc_disconnect(csp_conn_t *conn) {
@@ -136,7 +160,7 @@ int rpc_get_reply(csp_conn_t *conn, rpc_msg_t **msg, uint32_t maxresponses, uint
     *msg = (rpc_msg_t *)reply->data;
     (*msg)->reply.amount = be32toh((*msg)->reply.amount);
     (*msg)->reply.idx = be32toh((*msg)->reply.idx);
-    (*msg)->reply.data_len = 0;
+    (*msg)->reply.data_len = be16toh((*msg)->reply.data_len);
 
     if ((*msg)->reply.amount == 0) {
         csp_buffer_free(reply);

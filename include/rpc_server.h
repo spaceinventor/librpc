@@ -97,7 +97,7 @@ extern void rpc_send_reply(csp_conn_t *conn, rpc_msg_t *reply);
 
 #define RPC_HANDLE_SERVER_HDR(type, name) \
     void rpc_result_push_##name(type value, rpc_msg_t *msg); \
-    type rpc_request_pop_##name(rpc_msg_t *msg);
+    type rpc_request_pop_##name(rpc_msg_t *msg, uint16_t *offset);
 
 RPC_HANDLE_SERVER_HDR(uint8_t, uint8)
 RPC_HANDLE_SERVER_HDR(int8_t, int8)
@@ -111,7 +111,7 @@ RPC_HANDLE_SERVER_HDR(float, float)
 RPC_HANDLE_SERVER_HDR(double, double)
 #undef RPC_HANDLE_SERVER_HDR
 
-extern void rpc_request_pop_string(char *value, rpc_msg_t *msg);
-extern void rpc_request_pop_buffer(uint8_t *value, uint16_t *len, rpc_msg_t *msg);
+extern void rpc_request_pop_string(char *value, rpc_msg_t *msg, uint16_t *offset);
+extern void rpc_request_pop_buffer(uint8_t *value, uint16_t *len, rpc_msg_t *msg, uint16_t *offset);
 extern void rpc_result_push_string(const char *value, rpc_msg_t *msg);
 extern void rpc_result_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg);
