@@ -6,16 +6,20 @@ Converts JSON interface specifications into C header and implementation files
 with request/response structs, client functions, and server handlers.
 """
 
-import json
+try:
+    import json5 as json
+    json5_available = True
+except ImportError:
+    json5_available = False
+    import json
+
 import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import shutil
 
-import json
-
-# Type mapping from JSON to C primitives
+# Type mapping from JSON5 to C primitives
 TYPE_MAPPING = {
     'u8': 'uint8_t',
     'u16': 'uint16_t',
@@ -493,11 +497,20 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
 
 
 def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str = 'both', debug: bool = False):
-    """Generate C files from JSON specification."""
-    # Parse JSON file
-    with open(json_file, 'r') as f:
-        spec = json.load(f)
-    
+    """Generate C files from JSON5 specification."""
+    # Parse JSON5 file
+    spec = None
+    try:
+        with open(json_file, 'r') as f:
+            spec = json.load(f)
+    except Exception:
+        if not json5_available:
+            print("Warning: json5 module not available, falling back to standard json using '{}' as input.".format(json_file.replace('.json5', '.json')))
+            with open(json_file.replace('.json5', '.json'), 'r') as f:
+                spec = json.load(f)
+        else:
+            raise
+
     program = spec['program']
     
     if mode not in ('client', 'server', 'both'):
