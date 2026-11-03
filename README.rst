@@ -57,6 +57,7 @@ The framework supports the following primitive types:
 - **Floating Point**: float, double
 - **Strings**: Null-terminated character arrays
 - **Buffers**: Binary data with length prefix
+- **Enums**: Emun types
 
 Framework API
 =============
@@ -127,6 +128,18 @@ Interface specifications define programs and their procedures:
     {
         program: 'program_name',           // Program identifier
         address: 0x10000000,               // Unique 32-bit program ID
+        enums: [
+            {
+                name: 'some_enum',         // Name of the enum type
+                items: [
+                    {
+                        name: 'field_name',
+                        value: '0',        // Optional value
+                        description: 'Optional field description',
+                    }
+                ]
+            }
+        ],
         procedures: [
             {
                 name: 'procedure_name',    // Procedure identifier
@@ -181,6 +194,17 @@ Strings are handled specially:
       { name: 'text', type: 'string', max_length: 256 }
 
 - **Response strings**: Generated as ``const char *`` pointers (caller must ensure lifetime)
+
+Enum Field Configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Enums are handled specially:
+
+- **enums**: Set ``type`` as the name of the enum
+
+  .. code-block:: json5
+
+      { name: 'field_name', type: 'some_enum' }
 
 Generated Functions
 ~~~~~~~~~~~~~~~~~~~
