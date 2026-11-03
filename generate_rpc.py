@@ -466,6 +466,9 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         lines.append("")
         lines.append("    uint32_t idx = 0;")
         lines.append("    do {")
+        if len(proc['response']) > 0:
+            lines.append("        uint16_t offset = 0;")
+            lines.append("")
         lines.append(f"        status = rpc_get_reply(conn, &reply_msg, {maxresponses if maxresponses > 1 else 1}, idx, timeout);")
         lines.append("        if (status != RPC_STATUS_OK) {")
         lines.append("            rpc_disconnect(conn);")
@@ -476,7 +479,7 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         for field in proc['response']:
             field_type = field['type']
             if field_type == 'string':
-                lines.append(f"        rpc_result_pop_string(response[idx].{field['name']}, reply_msg);")
+                lines.append(f"        rpc_result_pop_string(response[idx].{field['name']}, reply_msg, &offset);")
             else:
                 type_size = get_type_size(spec, field)
                 c_type = get_c_type(type_size)
@@ -502,7 +505,7 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
                     pop_func = 'rpc_result_pop_double'
                 else:
                     pop_func = 'rpc_result_pop_uint32'
-                lines.append(f"        response[idx].{field['name']} = {pop_func}(reply_msg);")
+                lines.append(f"        response[idx].{field['name']} = {pop_func}(reply_msg, &offset);")
         lines.append("")
         if debug:
             lines.append(f'        printf("RPC: Receiving {proc_upper} response idx=%"PRIu32"\\n", idx);')
@@ -558,12 +561,14 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
         lines.append(f"            {request_typedef} request;")
         lines.append(f"            {response_typedef} response[{maxresponses}];")
         lines.append(f"            uint32_t numresponses = {maxresponses};")
+        if len(proc['request']) > 0:
+            lines.append( "            uint16_t offset = 0;")
         lines.append("")
         for field in proc['request']:
             field_type = field['type']
             if field_type == 'string':
                 lines.append(f"            char *{field['name']}_ptr = request.{field['name']};")
-                lines.append(f"            rpc_request_pop_string({field['name']}_ptr, call);")
+                lines.append(f"            rpc_request_pop_string({field['name']}_ptr, call, &offset);")
             else:
                 type_size = get_type_size(spec, field)
                 c_type = get_c_type(type_size)
@@ -589,7 +594,7 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
                     pop_func = 'rpc_request_pop_double'
                 else:
                     pop_func = 'rpc_request_pop_uint32'
-                lines.append(f"            request.{field['name']} = {pop_func}(call);")
+                lines.append(f"            request.{field['name']} = {pop_func}(call, &offset);")
         lines.append("")
         if debug:
             lines.append(f'            printf("RPC: Received {proc_upper} call\\n");')

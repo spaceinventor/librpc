@@ -16,12 +16,16 @@ rpc_server_t *global_rpc_server = NULL;
         memcpy(&reply->data[reply->data_len], &value, sizeof(type)); \
         reply->data_len += sizeof(type); \
     } \
-    type rpc_request_pop_##name(rpc_msg_t *msg) { \
+    type rpc_request_pop_##name(rpc_msg_t *msg, uint16_t *offset) { \
         rpc_call_t *call = &msg->call; \
         type value; \
-        memcpy(&value, &call->data[call->data_len], sizeof(type)); \
+        if (call->data_len < sizeof(type)) { \
+            return 0; \
+        } \
+        memcpy(&value, &call->data[*offset], sizeof(type)); \
         value = be##size##toh(value); \
-        call->data_len += sizeof(type); \
+        call->data_len -= sizeof(type); \
+        *offset += sizeof(type); \
         return value; \
     }
 
@@ -37,24 +41,44 @@ RPC_HANDLE_SERVER_IMPL(float, float, 32)
 RPC_HANDLE_SERVER_IMPL(double, double, 64)
 #undef RPC_HANDLE_SERVER_IMPL
 
-void rpc_request_pop_string(char *value, rpc_msg_t *msg) {
+void rpc_request_pop_string(char *value, rpc_msg_t *msg, uint16_t *offset) {
 
     rpc_call_t *request = &msg->call;
 
-    size_t len = strlen((char *)&request->data[request->data_len]);
-    strcpy(value, (char *)&request->data[request->data_len]);
+    if (request->data_len == 0) {
+        value[0] = '\0';
+        return;
+    }
 
-    request->data_len += len + 1;
+    size_t len = strnlen((char *)&request->data[*offset], request->data_len);
+    if (len == request->data_len) {
+        /* Missing NULL termination */
+        value[0] = '\0';
+        request->data_len = 0;
+        return;
+    }
+
+    strncpy(value, (char *)&request->data[*offset], len);
+    value[len] = '\0';
+
+    *offset += (len + 1);
+    request->data_len -= (len + 1);
 }
 
-void rpc_request_pop_buffer(uint8_t *value, uint16_t *len, rpc_msg_t *msg) {
+void rpc_request_pop_buffer(uint8_t *value, uint16_t *len, rpc_msg_t *msg, uint16_t *offset) {
 
     rpc_call_t *request = &msg->call;
 
-    *len = rpc_request_pop_uint16(msg);
-    memcpy(value, &request->data[request->data_len], *len);
+    *len = rpc_request_pop_uint16(msg, offset);
+    if (request->data_len < *len) {
+        request->data_len = 0;
+        *len = 0;
+        return;
+    }
+    memcpy(value, &request->data[*offset], *len);
 
-    request->data_len += *len;
+    request->data_len -= *len;
+    *offset += *len;
 }
 
 void rpc_result_push_string(const char *value, rpc_msg_t *msg) {
@@ -130,16 +154,25 @@ static void rpc_handle_msg(csp_conn_t *conn, csp_packet_t *packet) {
         return;
     }
 
+    if (sizeof(*req_msg) > packet->length) {
+        RPC_ERR("RPC-S: Error, invalid packet length.\n");
+        return;
+    }
+
     switch (req_msg->type) {
         case RPC_MSG_CALL:
         {
             uint32_t program = be32toh(req_msg->call.program);
             uint32_t procedure = be32toh(req_msg->call.procedure);
+            req_msg->call.data_len = be16toh(req_msg->call.data_len);
 
-            RPC_DBG("RPC-S: rpc_msg_call: data_len=%"PRId16",program=0x%"PRIX32",procedure=%"PRIu32"\n", be16toh(req_msg->call.data_len), program, procedure);
+            /* Sanity check of data_len in msg */
+            if (sizeof(*req_msg) + req_msg->call.data_len > packet->length) {
+                RPC_ERR("RPC-S: Error, invalid packet length.\n");
+                return;
+            }
 
-            /* Reset data length as it is used to unpack the content */
-            req_msg->call.data_len = 0;
+            RPC_DBG("RPC-S: rpc_msg_call: data_len=%"PRId16",program=0x%"PRIX32",procedure=%"PRIu32"\n", req_msg->call.data_len, program, procedure);
 
             /* Find a possibly matching program handler */
             const rpc_program_t *prg = lookup_program_from_id(&global_rpc_server->module, program);
