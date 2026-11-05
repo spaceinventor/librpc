@@ -633,7 +633,7 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
     return "\n".join(lines)
 
 
-def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str = 'both', debug: bool = False):
+def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str = 'both', debug: bool = False, copy_headers: bool = True):
     spec = None
     try:
         with open(json_file, 'r') as f:
@@ -676,24 +676,37 @@ def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str =
         with open(server_file, 'w') as f:
             f.write(generate_server_implementation(spec, debug))
 
+    if copy_headers:
+        parent_dir = os.path.join(output_dir, '..')
+        shutil.copy(common_header, parent_dir)
+        if mode in ('client', 'both'):
+            shutil.copy(client_header, parent_dir)
+        if mode in ('server', 'both'):
+            shutil.copy(server_header, parent_dir)
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 generate_rpc.py <json_file> [output_dir] [mode] [debug]")
+        print("Usage: python3 generate_rpc.py <json_file> [output_dir] [mode] [debug] [no-copy]")
         print("mode = client | server | both (default)")
-        print("debug = true | false (default)")
+        print("debug = debug | (omitted for false)")
+        print("no-copy = disables copying header files to the parent directory (../)")
         sys.exit(1)
 
     json_file = sys.argv[1]
     output_dir = None
     mode = 'both'
     debug = False
+    copy_headers = True
+
     for i in range(2, len(sys.argv)):
         arg = sys.argv[i].lower()
         if arg in ('client', 'server', 'both'):
             mode = arg
         elif arg == 'debug':
             debug = True
+        elif arg == 'no-copy':
+            copy_headers = False
         else:
             if output_dir is not None:
                 print(f"Error: Unrecognized argument: {sys.argv[i]}")
@@ -705,7 +718,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        generate_files(json_file, output_dir, mode, debug)
+        generate_files(json_file, output_dir, mode, debug, copy_headers)
     except Exception as e:
         print("FATAL ERROR GENERATING CODE:")
         traceback.print_exc()
