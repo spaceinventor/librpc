@@ -4,7 +4,7 @@ RPC Code Generator: Generates C code from JSON interface definitions.
 
 Converts JSON interface specifications into C header and implementation files
 with request/response structs, client functions, and server handlers.
-Supports flat arrays (no nested arrays) and bitwise math in enum values.
+Supports structs, arrays of structs, array of primitives, and bitwise math in enum values.
 """
 
 try:
@@ -40,6 +40,9 @@ def get_c_type(json_type: str) -> str:
 
 def get_field_type(spec: Dict[str, Any], field: Dict[str, Any]) -> str:
     type_str = field['type']
+    if type_str == 'struct':
+        return 'struct'
+        
     if type_str in TYPE_MAPPING:
         return get_c_type(type_str)
 
@@ -55,36 +58,69 @@ def get_field_type(spec: Dict[str, Any], field: Dict[str, Any]) -> str:
 def get_field_declaration(spec: Dict[str, Any], field: Dict[str, Any], indent="    ") -> str:
     json_type = field['type']
     name = field['name']
+    max_elements = field.get('max_elements', 1)
 
-    if json_type == 'string':
-        max_length = field.get('max_length', field.get('max_len', DEFAULT_STRING_MAX))
-        return f"char {name}[{max_length}]"
-    elif json_type == 'array':
-        max_size = field.get('max_size', 1)
-        # Note: the first line intentionally lacks indent here because it gets injected into a formatted string by the caller.
-        lines = [f"uint32_t {name}_count;"]
-        lines.append(f"{indent}struct {{")
+    if max_elements == 0:
+        raise ValueError(f"max_elements cannot be 0 for field '{name}'")
+
+    is_array = max_elements > 1
+    is_struct = json_type == 'struct'
+
+    if is_struct:
+        lines = []
+        if is_array:
+            lines.append(f"uint32_t {name}_count;")
+            lines.append(f"{indent}struct {{")
+        else:
+            lines.append(f"struct {{")
+            
         for subfield in field.get('contents', []):
             if 'description' in subfield:
                 lines.append(f"{indent}    /* {subfield['description']} */")
+            
             sub_type = subfield['type']
-            if sub_type == 'array':
-                raise ValueError(f"Nested arrays are not supported in field '{name}'.")
-            elif sub_type == 'string':
+            sub_max = subfield.get('max_elements', 1)
+            
+            if sub_max == 0:
+                raise ValueError(f"max_elements cannot be 0 for subfield '{subfield['name']}'")
+            if sub_type == 'struct' or sub_max > 1:
+                raise ValueError(f"Nested structs/arrays are not supported in field '{name}'.")
+                
+            if sub_type == 'string':
                 max_length = subfield.get('max_length', subfield.get('max_len', DEFAULT_STRING_MAX))
                 lines.append(f"{indent}    char {subfield['name']}[{max_length}];")
             else:
                 c_type = get_field_type(spec, subfield)
                 lines.append(f"{indent}    {c_type} {subfield['name']};")
-        lines.append(f"{indent}}} {name}[{max_size}]")
+                
+        if is_array:
+            lines.append(f"{indent}}} {name}[{max_elements}]")
+        else:
+            lines.append(f"{indent}}} {name}")
+            
         return "\n".join(lines)
 
-    type_str = get_field_type(spec, field)
-    return f"{type_str} {name}"
+    elif json_type == 'string':
+        max_length = field.get('max_length', field.get('max_len', DEFAULT_STRING_MAX))
+        if is_array:
+            return f"uint32_t {name}_count;\n{indent}char {name}[{max_elements}][{max_length}]"
+        else:
+            return f"char {name}[{max_length}]"
+
+    else:
+        c_type = get_field_type(spec, field)
+        if is_array:
+            return f"uint32_t {name}_count;\n{indent}{c_type} {name}[{max_elements}]"
+        else:
+            return f"{c_type} {name}"
 
 
 def get_type_size(spec: Dict[str, Any], field: Dict[str, Any]) -> str:
     field_type = field['type']
+    
+    if field_type == 'struct':
+        return 'struct'
+        
     if field_type in TYPE_MAPPING:
         return field_type
 
@@ -154,22 +190,52 @@ def get_push_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg
     lines = []
     push_pfx = "rpc_result_push" if is_result else "rpc_request_push"
     name = field['name']
+    
+    max_elements = field.get('max_elements', 1)
+    if max_elements == 0:
+        raise ValueError(f"max_elements cannot be 0 for field '{name}'")
+        
+    is_array = max_elements > 1
+    is_struct = field['type'] == 'struct'
 
-    if field['type'] == 'array':
+    if is_array:
         lines.append(f"{indent}{push_pfx}_uint32({prefix}{name}_count, {msg_name});")
         lines.append(f"{indent}for (uint32_t i_{name} = 0; i_{name} < {prefix}{name}_count; i_{name}++) {{")
+        
+        if is_struct:
+            for subfield in field.get('contents', []):
+                if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                    raise ValueError(f"Nested structs/arrays are not supported in '{name}'.")
+                elif subfield['type'] == 'string':
+                    lines.append(f"{indent}    {push_pfx}_string({prefix}{name}[i_{name}].{subfield['name']}, {msg_name});")
+                else:
+                    c_type = get_c_type(get_type_size(spec, subfield))
+                    suffix = c_type.replace('_t', '')
+                    lines.append(f"{indent}    {push_pfx}_{suffix}({prefix}{name}[i_{name}].{subfield['name']}, {msg_name});")
+        elif field['type'] == 'string':
+            lines.append(f"{indent}    {push_pfx}_string({prefix}{name}[i_{name}], {msg_name});")
+        else:
+            type_size = get_type_size(spec, field)
+            c_type = get_c_type(type_size)
+            suffix = c_type.replace('_t', '')
+            lines.append(f"{indent}    {push_pfx}_{suffix}({prefix}{name}[i_{name}], {msg_name});")
+            
+        lines.append(f"{indent}}}")
+        
+    elif is_struct:
         for subfield in field.get('contents', []):
-            if subfield['type'] == 'array':
-                raise ValueError(f"Nested arrays are not supported in '{name}'.")
+            if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                raise ValueError(f"Nested structs/arrays are not supported in '{name}'.")
             elif subfield['type'] == 'string':
-                lines.append(f"{indent}    {push_pfx}_string({prefix}{name}[i_{name}].{subfield['name']}, {msg_name});")
+                lines.append(f"{indent}{push_pfx}_string({prefix}{name}.{subfield['name']}, {msg_name});")
             else:
                 c_type = get_c_type(get_type_size(spec, subfield))
                 suffix = c_type.replace('_t', '')
-                lines.append(f"{indent}    {push_pfx}_{suffix}({prefix}{name}[i_{name}].{subfield['name']}, {msg_name});")
-        lines.append(f"{indent}}}")
+                lines.append(f"{indent}{push_pfx}_{suffix}({prefix}{name}.{subfield['name']}, {msg_name});")
+                
     elif field['type'] == 'string':
         lines.append(f"{indent}{push_pfx}_string({prefix}{name}, {msg_name});")
+        
     else:
         type_size = get_type_size(spec, field)
         c_type = get_c_type(type_size)
@@ -183,24 +249,53 @@ def get_pop_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg_
     lines = []
     pop_pfx = "rpc_result_pop" if is_result else "rpc_request_pop"
     name = field['name']
+    
+    max_elements = field.get('max_elements', 1)
+    if max_elements == 0:
+        raise ValueError(f"max_elements cannot be 0 for field '{name}'")
+        
+    is_array = max_elements > 1
+    is_struct = field['type'] == 'struct'
 
-    if field['type'] == 'array':
+    if is_array:
         lines.append(f"{indent}{prefix}{name}_count = {pop_pfx}_uint32({msg_name}, {offset_name});")
-        max_size = field.get('max_size', 1)
-        lines.append(f"{indent}if ({prefix}{name}_count > {max_size}) {prefix}{name}_count = {max_size};")
+        lines.append(f"{indent}if ({prefix}{name}_count > {max_elements}) {prefix}{name}_count = {max_elements};")
         lines.append(f"{indent}for (uint32_t i_{name} = 0; i_{name} < {prefix}{name}_count; i_{name}++) {{")
+        
+        if is_struct:
+            for subfield in field.get('contents', []):
+                if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                    raise ValueError(f"Nested structs/arrays are not supported in '{name}'.")
+                elif subfield['type'] == 'string':
+                    lines.append(f"{indent}    {pop_pfx}_string({prefix}{name}[i_{name}].{subfield['name']}, {msg_name}, {offset_name});")
+                else:
+                    c_type = get_c_type(get_type_size(spec, subfield))
+                    suffix = c_type.replace('_t', '')
+                    lines.append(f"{indent}    {prefix}{name}[i_{name}].{subfield['name']} = {pop_pfx}_{suffix}({msg_name}, {offset_name});")
+        elif field['type'] == 'string':
+            lines.append(f"{indent}    {pop_pfx}_string({prefix}{name}[i_{name}], {msg_name}, {offset_name});")
+        else:
+            type_size = get_type_size(spec, field)
+            c_type = get_c_type(type_size)
+            suffix = c_type.replace('_t', '')
+            lines.append(f"{indent}    {prefix}{name}[i_{name}] = {pop_pfx}_{suffix}({msg_name}, {offset_name});")
+            
+        lines.append(f"{indent}}}")
+        
+    elif is_struct:
         for subfield in field.get('contents', []):
-            if subfield['type'] == 'array':
-                raise ValueError(f"Nested arrays are not supported in '{name}'.")
+            if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                raise ValueError(f"Nested structs/arrays are not supported in '{name}'.")
             elif subfield['type'] == 'string':
-                lines.append(f"{indent}    {pop_pfx}_string({prefix}{name}[i_{name}].{subfield['name']}, {msg_name}, {offset_name});")
+                lines.append(f"{indent}{pop_pfx}_string({prefix}{name}.{subfield['name']}, {msg_name}, {offset_name});")
             else:
                 c_type = get_c_type(get_type_size(spec, subfield))
                 suffix = c_type.replace('_t', '')
-                lines.append(f"{indent}    {prefix}{name}[i_{name}].{subfield['name']} = {pop_pfx}_{suffix}({msg_name}, {offset_name});")
-        lines.append(f"{indent}}}")
+                lines.append(f"{indent}{prefix}{name}.{subfield['name']} = {pop_pfx}_{suffix}({msg_name}, {offset_name});")
+                
     elif field['type'] == 'string':
         lines.append(f"{indent}{pop_pfx}_string({prefix}{name}, {msg_name}, {offset_name});")
+        
     else:
         type_size = get_type_size(spec, field)
         c_type = get_c_type(type_size)
@@ -213,21 +308,48 @@ def get_pop_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg_
 def get_debug_print_lines(spec: Dict[str, Any], field: Dict[str, Any], path_prefix: str, val_prefix: str, indent: str = "    ") -> List[str]:
     lines = []
     name = field['name']
+    
+    max_elements = field.get('max_elements', 1)
+    if max_elements == 0:
+        raise ValueError(f"max_elements cannot be 0 for field '{name}'")
+        
+    is_array = max_elements > 1
+    is_struct = field['type'] == 'struct'
 
-    if field['type'] == 'array':
+    if is_array:
         lines.append(f'{indent}printf("RPC: {path_prefix}{name}_count=%"PRIu32"\\n", {val_prefix}{name}_count);')
         lines.append(f"{indent}for (uint32_t i_{name} = 0; i_{name} < {val_prefix}{name}_count; i_{name}++) {{")
+        
+        if is_struct:
+            for subfield in field.get('contents', []):
+                if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                    raise ValueError("Nested structs/arrays are not supported.")
+                elif subfield['type'] == 'string':
+                    lines.append(f'{indent}    printf("RPC: {path_prefix}{name}[%"PRIu32"].{subfield["name"]}=%s\\n", i_{name}, {val_prefix}{name}[i_{name}].{subfield["name"]});')
+                else:
+                    fmt = get_debug_printf_format(get_type_size(spec, subfield))
+                    lines.append(f'{indent}    printf("RPC: {path_prefix}{name}[%"PRIu32"].{subfield["name"]}={fmt}\\n", i_{name}, {val_prefix}{name}[i_{name}].{subfield["name"]});')
+        elif field['type'] == 'string':
+            lines.append(f'{indent}    printf("RPC: {path_prefix}{name}[%"PRIu32"]=%s\\n", i_{name}, {val_prefix}{name}[i_{name}]);')
+        else:
+            fmt = get_debug_printf_format(get_type_size(spec, field))
+            lines.append(f'{indent}    printf("RPC: {path_prefix}{name}[%"PRIu32"]={fmt}\\n", i_{name}, {val_prefix}{name}[i_{name}]);')
+            
+        lines.append(f"{indent}}}")
+        
+    elif is_struct:
         for subfield in field.get('contents', []):
-            if subfield['type'] == 'array':
-                raise ValueError("Nested arrays are not supported.")
+            if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                raise ValueError("Nested structs/arrays are not supported.")
             elif subfield['type'] == 'string':
-                lines.append(f'{indent}    printf("RPC: {path_prefix}{name}[%"PRIu32"].{subfield["name"]}=%s\\n", i_{name}, {val_prefix}{name}[i_{name}].{subfield["name"]});')
+                lines.append(f'{indent}printf("RPC: {path_prefix}{name}.{subfield["name"]}=%s\\n", {val_prefix}{name}.{subfield["name"]});')
             else:
                 fmt = get_debug_printf_format(get_type_size(spec, subfield))
-                lines.append(f'{indent}    printf("RPC: {path_prefix}{name}[%"PRIu32"].{subfield["name"]}={fmt}\\n", i_{name}, {val_prefix}{name}[i_{name}].{subfield["name"]});')
-        lines.append(f"{indent}}}")
+                lines.append(f'{indent}printf("RPC: {path_prefix}{name}.{subfield["name"]}={fmt}\\n", {val_prefix}{name}.{subfield["name"]});')
+                
     elif field['type'] == 'string':
         lines.append(f'{indent}printf("RPC: {path_prefix}{name}=%s\\n", {val_prefix}{name});')
+        
     else:
         fmt = get_debug_printf_format(get_type_size(spec, field))
         lines.append(f'{indent}printf("RPC: {path_prefix}{name}={fmt}\\n", {val_prefix}{name});')
@@ -332,7 +454,7 @@ def generate_client_header(spec: Dict[str, Any]) -> str:
         proc_name = proc['name']
         request_typedef = f"rpc_{program}_{proc_name}_request_t"
         response_typedef = f"rpc_{program}_{proc_name}_response_t"
-        non_default_fields = [f for f in proc['request'] if 'default' not in f and f['type'] != 'array']
+        non_default_fields = [f for f in proc['request'] if 'default' not in f and f.get('max_elements', 1) <= 1 and f['type'] != 'struct']
 
         if non_default_fields:
             init_params = ", ".join([f"{get_field_type(spec, f)} {f['name']}" for f in non_default_fields])
@@ -410,7 +532,8 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
     for proc in procedures:
         proc_name = proc['name']
         request_typedef = f"rpc_{program}_{proc_name}_request_t"
-        non_default_fields = [f for f in proc['request'] if 'default' not in f and f['type'] != 'array']
+        
+        non_default_fields = [f for f in proc['request'] if 'default' not in f and f.get('max_elements', 1) <= 1 and f['type'] != 'struct']
 
         if non_default_fields:
             init_params = ", ".join([f"{get_field_type(spec, f)} {f['name']}" for f in non_default_fields])
@@ -418,18 +541,18 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         else:
             lines.append(f"int {to_function_name(program, proc_name, 'init')}({request_typedef} *request) {{")
             
-        if any(f['type'] == 'array' for f in proc['request']):
+        if any(f.get('max_elements', 1) > 1 for f in proc['request']):
             lines.append(f"    memset(request, 0, sizeof(*request));")
 
         for field in non_default_fields:
             if field['type'] == 'string':
                 lines.append(f"    strncpy(request->{field['name']}, {field['name']}, sizeof(request->{field['name']}));")
                 lines.append(f"    request->{field['name']}[sizeof(request->{field['name']}) - 1] = 0;")
-            elif field['type'] != 'array':
+            else:
                 lines.append(f"    request->{field['name']} = {field['name']};")
 
         for field in proc['request']:
-            if 'default' in field and field['type'] != 'array':
+            if 'default' in field and field.get('max_elements', 1) <= 1 and field['type'] != 'struct':
                 default_value = render_c_default(field)
                 if field['type'] == 'string':
                     lines.append(f"    strncpy(request->{field['name']}, {default_value}, sizeof(request->{field['name']}));")
@@ -612,11 +735,11 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
         lines.append(f"        case RPC_{program_upper}_{proc_upper}: /* {proc_index} */")
         lines.append("        {")
         lines.append(f"            {request_typedef} *request = &req_buf.{proc_name};")
-        if any(f['type'] == 'array' for f in proc['request']):
+        if any(f.get('max_elements', 1) > 1 for f in proc['request']):
             lines.append(f"            memset(request, 0, sizeof(*request));")
             
         lines.append(f"            {response_typedef} *response = res_buf.{proc_name};")
-        if any(f['type'] == 'array' for f in proc['response']):
+        if any(f.get('max_elements', 1) > 1 for f in proc['response']):
             lines.append(f"            memset(response, 0, sizeof(res_buf.{proc_name}));")
         
         if maxresponses > 1:
