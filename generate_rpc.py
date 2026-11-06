@@ -418,8 +418,8 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         else:
             lines.append(f"int {to_function_name(program, proc_name, 'init')}({request_typedef} *request) {{")
             
-        # Provide base blanking for array elements safely
-        lines.append(f"    memset(request, 0, sizeof(*request));")
+        if any(f['type'] == 'array' for f in proc['request']):
+            lines.append(f"    memset(request, 0, sizeof(*request));")
 
         for field in non_default_fields:
             if field['type'] == 'string':
@@ -612,9 +612,12 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
         lines.append(f"        case RPC_{program_upper}_{proc_upper}: /* {proc_index} */")
         lines.append("        {")
         lines.append(f"            {request_typedef} *request = &req_buf.{proc_name};")
-        lines.append(f"            memset(request, 0, sizeof(*request));")
+        if any(f['type'] == 'array' for f in proc['request']):
+            lines.append(f"            memset(request, 0, sizeof(*request));")
+            
         lines.append(f"            {response_typedef} *response = res_buf.{proc_name};")
-        lines.append(f"            memset(response, 0, sizeof(res_buf.{proc_name}));")
+        if any(f['type'] == 'array' for f in proc['response']):
+            lines.append(f"            memset(response, 0, sizeof(res_buf.{proc_name}));")
         
         if maxresponses > 1:
             lines.append(f"            uint32_t numresponses = {maxresponses};")
