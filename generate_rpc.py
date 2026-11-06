@@ -387,9 +387,23 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
     lines.append(f'#include "rpc_{program}.h"')
     lines.append("#include <rpc_client.h>")
     lines.append("#include <string.h>")
+    lines.append("#include <assert.h>")
     if debug:
         lines.append("#include <stdio.h>")
         lines.append("#include <inttypes.h>")
+    lines.append("")
+    
+    # Add size validation assert block
+    lines.append("/* Size Checks against CSP_BUFFER_SIZE */")
+    lines.append("static union {")
+    for proc in procedures:
+        proc_name = proc['name']
+        lines.append(f"    struct {{ rpc_{program}_{proc_name}_request_t t; }} __attribute__((packed)) {proc_name}_req;")
+        lines.append(f"    struct {{ rpc_{program}_{proc_name}_response_t t; }} __attribute__((packed)) {proc_name}_res;")
+    lines.append(f"}} rpc_{program}_packed_tmp;")
+    lines.append("")
+    lines.append(f'static_assert(sizeof(rpc_msg_t) + sizeof(rpc_{program}_packed_tmp) <= CSP_BUFFER_SIZE,')
+    lines.append(f'              "rpc_{program} messages are too large compared to CSP_BUFFER_SIZE");')
     lines.append("")
 
     # Init functions
@@ -544,9 +558,24 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
     lines.append('#include <endian.h>')
     lines.append('#include <inttypes.h>')
     lines.append("#include <string.h>")
+    lines.append("#include <assert.h>")
     if debug:
         lines.append('#include <stdio.h>')
     lines.append("")
+    
+    # Add size validation assert block
+    lines.append("/* Size Checks against CSP_BUFFER_SIZE */")
+    lines.append("static union {")
+    for proc in procedures:
+        proc_name = proc['name']
+        lines.append(f"    struct {{ rpc_{program}_{proc_name}_request_t t; }} __attribute__((packed)) {proc_name}_req;")
+        lines.append(f"    struct {{ rpc_{program}_{proc_name}_response_t t; }} __attribute__((packed)) {proc_name}_res;")
+    lines.append(f"}} rpc_{program}_packed_tmp;")
+    lines.append("")
+    lines.append(f'static_assert(sizeof(rpc_msg_t) + sizeof(rpc_{program}_packed_tmp) <= CSP_BUFFER_SIZE,')
+    lines.append(f'              "rpc_{program} messages are too large compared to CSP_BUFFER_SIZE");')
+    lines.append("")
+    
     lines.append("/* Server Handler Dispatcher */")
     program_upper = to_macro_name(program)
     lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, csp_conn_t *conn, rpc_msg_t *call) {{")
@@ -586,7 +615,10 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
         lines.append(f"            memset(request, 0, sizeof(*request));")
         lines.append(f"            {response_typedef} *response = res_buf.{proc_name};")
         lines.append(f"            memset(response, 0, sizeof(res_buf.{proc_name}));")
-        lines.append(f"            uint32_t numresponses = {maxresponses};")
+        
+        if maxresponses > 1:
+            lines.append(f"            uint32_t numresponses = {maxresponses};")
+            
         if len(proc['request']) > 0:
             lines.append("            uint16_t offset = 0;")
         lines.append("")
@@ -609,18 +641,31 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
             lines.append(f"            {to_function_name(program, proc_name, 'host')}(request, response);")
         lines.append("")
 
-        lines.append("            for (uint32_t i_resp = 0; i_resp < numresponses; i_resp++) {")
-        if debug:
-            lines.append(f'                printf("RPC: Sending {proc_upper} response idx=%"PRIu32"\\n", i_resp);')
+        if maxresponses > 1:
+            lines.append("            for (uint32_t i_resp = 0; i_resp < numresponses; i_resp++) {")
+            if debug:
+                lines.append(f'                printf("RPC: Sending {proc_upper} response idx=%"PRIu32"\\n", i_resp);')
+                for field in proc['response']:
+                    lines.extend(get_debug_print_lines(spec, field, "response[i_resp].", "response[i_resp].", "                "))
+
+            lines.append("                rpc_msg_t *reply = rpc_result_prepare(call, numresponses, i_resp);")
             for field in proc['response']:
-                lines.extend(get_debug_print_lines(spec, field, "response[i_resp].", "response[i_resp].", "                "))
+                lines.extend(get_push_lines(spec, field, "response[i_resp].", "reply", True, "                "))
 
-        lines.append("                rpc_msg_t *reply = rpc_result_prepare(call, numresponses, i_resp);")
-        for field in proc['response']:
-            lines.extend(get_push_lines(spec, field, "response[i_resp].", "reply", True, "                "))
+            lines.append(f"                rpc_send_reply(conn, reply);")
+            lines.append("            }")
+        else:
+            if debug:
+                lines.append(f'            printf("RPC: Sending {proc_upper} response\\n");')
+                for field in proc['response']:
+                    lines.extend(get_debug_print_lines(spec, field, "response->", "response->", "            "))
+            
+            lines.append("            rpc_msg_t *reply = rpc_result_prepare(call, 1, 0);")
+            for field in proc['response']:
+                lines.extend(get_push_lines(spec, field, "response->", "reply", True, "            "))
+            
+            lines.append(f"            rpc_send_reply(conn, reply);")
 
-        lines.append(f"                rpc_send_reply(conn, reply);")
-        lines.append("            }")
         lines.append("            break;")
         lines.append("        }")
 
@@ -698,7 +743,7 @@ if __name__ == "__main__":
     mode = 'both'
     debug = False
     copy_headers = True
-
+    
     for i in range(2, len(sys.argv)):
         arg = sys.argv[i].lower()
         if arg in ('client', 'server', 'both'):
