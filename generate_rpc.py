@@ -42,7 +42,7 @@ def get_field_type(spec: Dict[str, Any], field: Dict[str, Any]) -> str:
     type_str = field['type']
     if type_str == 'struct':
         return 'struct'
-        
+
     if type_str in TYPE_MAPPING:
         return get_c_type(type_str)
 
@@ -73,31 +73,31 @@ def get_field_declaration(spec: Dict[str, Any], field: Dict[str, Any], indent=" 
             lines.append(f"{indent}struct {{")
         else:
             lines.append(f"struct {{")
-            
+
         for subfield in field.get('contents', []):
             if 'description' in subfield:
                 lines.append(f"{indent}    /* {subfield['description']} */")
-            
+
             sub_type = subfield['type']
             sub_max = subfield.get('max_elements', 1)
-            
+
             if sub_max == 0:
                 raise ValueError(f"max_elements cannot be 0 for subfield '{subfield['name']}'")
             if sub_type == 'struct' or sub_max > 1:
                 raise ValueError(f"Nested structs/arrays are not supported in field '{name}'.")
-                
+
             if sub_type == 'string':
                 max_length = subfield.get('max_length', subfield.get('max_len', DEFAULT_STRING_MAX))
                 lines.append(f"{indent}    char {subfield['name']}[{max_length}];")
             else:
                 c_type = get_field_type(spec, subfield)
                 lines.append(f"{indent}    {c_type} {subfield['name']};")
-                
+
         if is_array:
             lines.append(f"{indent}}} {name}[{max_elements}]")
         else:
             lines.append(f"{indent}}} {name}")
-            
+
         return "\n".join(lines)
 
     elif json_type == 'string':
@@ -117,10 +117,10 @@ def get_field_declaration(spec: Dict[str, Any], field: Dict[str, Any], indent=" 
 
 def get_type_size(spec: Dict[str, Any], field: Dict[str, Any]) -> str:
     field_type = field['type']
-    
+
     if field_type == 'struct':
         return 'struct'
-        
+
     if field_type in TYPE_MAPPING:
         return field_type
 
@@ -190,18 +190,18 @@ def get_push_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg
     lines = []
     push_pfx = "rpc_result_push" if is_result else "rpc_request_push"
     name = field['name']
-    
+
     max_elements = field.get('max_elements', 1)
     if max_elements == 0:
         raise ValueError(f"max_elements cannot be 0 for field '{name}'")
-        
+
     is_array = max_elements > 1
     is_struct = field['type'] == 'struct'
 
     if is_array:
         lines.append(f"{indent}{push_pfx}_uint32({prefix}{name}_count, {msg_name});")
         lines.append(f"{indent}for (uint32_t i_{name} = 0; i_{name} < {prefix}{name}_count; i_{name}++) {{")
-        
+
         if is_struct:
             for subfield in field.get('contents', []):
                 if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
@@ -219,9 +219,9 @@ def get_push_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg
             c_type = get_c_type(type_size)
             suffix = c_type.replace('_t', '')
             lines.append(f"{indent}    {push_pfx}_{suffix}({prefix}{name}[i_{name}], {msg_name});")
-            
+
         lines.append(f"{indent}}}")
-        
+
     elif is_struct:
         for subfield in field.get('contents', []):
             if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
@@ -232,10 +232,10 @@ def get_push_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg
                 c_type = get_c_type(get_type_size(spec, subfield))
                 suffix = c_type.replace('_t', '')
                 lines.append(f"{indent}{push_pfx}_{suffix}({prefix}{name}.{subfield['name']}, {msg_name});")
-                
+
     elif field['type'] == 'string':
         lines.append(f"{indent}{push_pfx}_string({prefix}{name}, {msg_name});")
-        
+
     else:
         type_size = get_type_size(spec, field)
         c_type = get_c_type(type_size)
@@ -249,11 +249,11 @@ def get_pop_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg_
     lines = []
     pop_pfx = "rpc_result_pop" if is_result else "rpc_request_pop"
     name = field['name']
-    
+
     max_elements = field.get('max_elements', 1)
     if max_elements == 0:
         raise ValueError(f"max_elements cannot be 0 for field '{name}'")
-        
+
     is_array = max_elements > 1
     is_struct = field['type'] == 'struct'
 
@@ -261,7 +261,7 @@ def get_pop_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg_
         lines.append(f"{indent}{prefix}{name}_count = {pop_pfx}_uint32({msg_name}, {offset_name});")
         lines.append(f"{indent}if ({prefix}{name}_count > {max_elements}) {prefix}{name}_count = {max_elements};")
         lines.append(f"{indent}for (uint32_t i_{name} = 0; i_{name} < {prefix}{name}_count; i_{name}++) {{")
-        
+
         if is_struct:
             for subfield in field.get('contents', []):
                 if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
@@ -279,9 +279,9 @@ def get_pop_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg_
             c_type = get_c_type(type_size)
             suffix = c_type.replace('_t', '')
             lines.append(f"{indent}    {prefix}{name}[i_{name}] = {pop_pfx}_{suffix}({msg_name}, {offset_name});")
-            
+
         lines.append(f"{indent}}}")
-        
+
     elif is_struct:
         for subfield in field.get('contents', []):
             if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
@@ -292,10 +292,10 @@ def get_pop_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg_
                 c_type = get_c_type(get_type_size(spec, subfield))
                 suffix = c_type.replace('_t', '')
                 lines.append(f"{indent}{prefix}{name}.{subfield['name']} = {pop_pfx}_{suffix}({msg_name}, {offset_name});")
-                
+
     elif field['type'] == 'string':
         lines.append(f"{indent}{pop_pfx}_string({prefix}{name}, {msg_name}, {offset_name});")
-        
+
     else:
         type_size = get_type_size(spec, field)
         c_type = get_c_type(type_size)
@@ -308,18 +308,18 @@ def get_pop_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg_
 def get_debug_print_lines(spec: Dict[str, Any], field: Dict[str, Any], path_prefix: str, val_prefix: str, indent: str = "    ") -> List[str]:
     lines = []
     name = field['name']
-    
+
     max_elements = field.get('max_elements', 1)
     if max_elements == 0:
         raise ValueError(f"max_elements cannot be 0 for field '{name}'")
-        
+
     is_array = max_elements > 1
     is_struct = field['type'] == 'struct'
 
     if is_array:
         lines.append(f'{indent}printf("RPC: {path_prefix}{name}_count=%"PRIu32"\\n", {val_prefix}{name}_count);')
         lines.append(f"{indent}for (uint32_t i_{name} = 0; i_{name} < {val_prefix}{name}_count; i_{name}++) {{")
-        
+
         if is_struct:
             for subfield in field.get('contents', []):
                 if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
@@ -334,9 +334,9 @@ def get_debug_print_lines(spec: Dict[str, Any], field: Dict[str, Any], path_pref
         else:
             fmt = get_debug_printf_format(get_type_size(spec, field))
             lines.append(f'{indent}    printf("RPC: {path_prefix}{name}[%"PRIu32"]={fmt}\\n", i_{name}, {val_prefix}{name}[i_{name}]);')
-            
+
         lines.append(f"{indent}}}")
-        
+
     elif is_struct:
         for subfield in field.get('contents', []):
             if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
@@ -346,10 +346,10 @@ def get_debug_print_lines(spec: Dict[str, Any], field: Dict[str, Any], path_pref
             else:
                 fmt = get_debug_printf_format(get_type_size(spec, subfield))
                 lines.append(f'{indent}printf("RPC: {path_prefix}{name}.{subfield["name"]}={fmt}\\n", {val_prefix}{name}.{subfield["name"]});')
-                
+
     elif field['type'] == 'string':
         lines.append(f'{indent}printf("RPC: {path_prefix}{name}=%s\\n", {val_prefix}{name});')
-        
+
     else:
         fmt = get_debug_printf_format(get_type_size(spec, field))
         lines.append(f'{indent}printf("RPC: {path_prefix}{name}={fmt}\\n", {val_prefix}{name});')
@@ -465,7 +465,7 @@ def generate_client_header(spec: Dict[str, Any]) -> str:
         if maxresponses > 1:
             lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, uint32_t timeout, const {request_typedef} *request, {response_typedef} *response, uint32_t *numresponses);")
         else:
-            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, uint32_t timeout, const {request_typedef} *request, {response_typedef} *response);") 
+            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, uint32_t timeout, const {request_typedef} *request, {response_typedef} *response);")
         lines.append("")
     lines.append(f"#endif /* {guard} */")
     return "\n".join(lines)
@@ -514,7 +514,7 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         lines.append("#include <stdio.h>")
         lines.append("#include <inttypes.h>")
     lines.append("")
-    
+
     # Add size validation assert block
     lines.append("/* Size Checks against CSP_BUFFER_SIZE */")
     lines.append("static union {")
@@ -532,7 +532,7 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
     for proc in procedures:
         proc_name = proc['name']
         request_typedef = f"rpc_{program}_{proc_name}_request_t"
-        
+
         non_default_fields = [f for f in proc['request'] if 'default' not in f and f.get('max_elements', 1) <= 1 and f['type'] != 'struct']
 
         if non_default_fields:
@@ -540,9 +540,10 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
             lines.append(f"int {to_function_name(program, proc_name, 'init')}({request_typedef} *request, {init_params}) {{")
         else:
             lines.append(f"int {to_function_name(program, proc_name, 'init')}({request_typedef} *request) {{")
-            
-        if any(f.get('max_elements', 1) > 1 for f in proc['request']):
-            lines.append(f"    memset(request, 0, sizeof(*request));")
+
+        for field in proc['request']:
+            if field.get('max_elements', 1) > 1:
+                lines.append(f"    request->{field['name']}_count = 0;")
 
         for field in non_default_fields:
             if field['type'] == 'string':
@@ -606,7 +607,7 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
             lines.append("    uint32_t max_req_responses = *numresponses;")
             lines.append("    uint32_t idx = 0;")
             lines.append("    while (idx < max_req_responses) {")
-            
+
             if len(proc['response']) > 0:
                 lines.append("        uint16_t offset = 0;")
                 lines.append("")
@@ -685,7 +686,7 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
     if debug:
         lines.append('#include <stdio.h>')
     lines.append("")
-    
+
     # Add size validation assert block
     lines.append("/* Size Checks against CSP_BUFFER_SIZE */")
     lines.append("static union {")
@@ -698,12 +699,12 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
     lines.append(f'static_assert(sizeof(rpc_msg_t) + sizeof(rpc_{program}_packed_tmp) <= CSP_BUFFER_SIZE,')
     lines.append(f'              "rpc_{program} messages are too large compared to CSP_BUFFER_SIZE");')
     lines.append("")
-    
+
     lines.append("/* Server Handler Dispatcher */")
     program_upper = to_macro_name(program)
     lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, csp_conn_t *conn, rpc_msg_t *call) {{")
     lines.append("")
-    
+
     # Create unified buffers to minimize stack and overall BSS usage
     lines.append("    static union {")
     for proc in procedures:
@@ -722,6 +723,10 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
     lines.append("    } res_buf;")
     lines.append("")
 
+    lines.append("    memset(&req_buf, 0, sizeof(req_buf));")
+    lines.append("    memset(&res_buf, 0, sizeof(res_buf));")
+    lines.append("")
+
     lines.append("    switch (procedure) {")
 
     for proc in procedures:
@@ -735,16 +740,11 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
         lines.append(f"        case RPC_{program_upper}_{proc_upper}: /* {proc_index} */")
         lines.append("        {")
         lines.append(f"            {request_typedef} *request = &req_buf.{proc_name};")
-        if any(f.get('max_elements', 1) > 1 for f in proc['request']):
-            lines.append(f"            memset(request, 0, sizeof(*request));")
-            
         lines.append(f"            {response_typedef} *response = res_buf.{proc_name};")
-        if any(f.get('max_elements', 1) > 1 for f in proc['response']):
-            lines.append(f"            memset(response, 0, sizeof(res_buf.{proc_name}));")
-        
+
         if maxresponses > 1:
             lines.append(f"            uint32_t numresponses = {maxresponses};")
-            
+
         if len(proc['request']) > 0:
             lines.append("            uint16_t offset = 0;")
         lines.append("")
@@ -785,11 +785,11 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
                 lines.append(f'            printf("RPC: Sending {proc_upper} response\\n");')
                 for field in proc['response']:
                     lines.extend(get_debug_print_lines(spec, field, "response->", "response->", "            "))
-            
+
             lines.append("            rpc_msg_t *reply = rpc_result_prepare(call, 1, 0);")
             for field in proc['response']:
                 lines.extend(get_push_lines(spec, field, "response->", "reply", True, "            "))
-            
+
             lines.append(f"            rpc_send_reply(conn, reply);")
 
         lines.append("            break;")
@@ -869,7 +869,7 @@ if __name__ == "__main__":
     mode = 'both'
     debug = False
     copy_headers = True
-    
+
     for i in range(2, len(sys.argv)):
         arg = sys.argv[i].lower()
         if arg in ('client', 'server', 'both'):
