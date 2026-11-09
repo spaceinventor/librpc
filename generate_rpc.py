@@ -4,6 +4,7 @@ RPC Code Generator: Generates C code from JSON interface definitions.
 
 Converts JSON interface specifications into C header and implementation files
 with request/response structs, client functions, and server handlers.
+Supports structs, arrays of structs, array of primitives, and bitwise math in enum values.
 """
 
 try:
@@ -15,70 +16,110 @@ except ImportError:
 
 import os
 import sys
+import traceback
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import shutil
 
 # Type mapping from JSON5 to C primitives
 TYPE_MAPPING = {
-    'u8': 'uint8_t',
-    'u16': 'uint16_t',
-    'u32': 'uint32_t',
-    'u64': 'uint64_t',
-    'i8': 'int8_t',
-    'i16': 'int16_t',
-    'i32': 'int32_t',
-    'i64': 'int64_t',
-    'x8': 'uint8_t',
-    'x16': 'uint16_t',
-    'x32': 'uint32_t',
-    'x64': 'uint64_t',
-    'f32': 'float',
-    'f64': 'double',
-    'string': 'char *',
+    'u8': 'uint8_t', 'u16': 'uint16_t', 'u32': 'uint32_t', 'u64': 'uint64_t',
+    'i8': 'int8_t',  'i16': 'int16_t',  'i32': 'int32_t',  'i64': 'int64_t',
+    'x8': 'uint8_t', 'x16': 'uint16_t', 'x32': 'uint32_t', 'x64': 'uint64_t',
+    'f32': 'float',  'f64': 'double',   'string': 'char *',
 }
 
 DEFAULT_STRING_MAX = 256
 
 
 def get_c_type(json_type: str) -> str:
-    """Convert JSON type to C type."""
     if json_type not in TYPE_MAPPING:
         raise ValueError(f"Unknown type: {json_type}")
     return TYPE_MAPPING[json_type]
 
 
 def get_field_type(spec: Dict[str, Any], field: Dict[str, Any]) -> str:
-    """Return a C field type for a given JSON5 field."""
-    type = field['type']
+    type_str = field['type']
+    if type_str == 'struct':
+        return 'struct'
 
-    if type in TYPE_MAPPING:
-        return get_c_type(type)
+    if type_str in TYPE_MAPPING:
+        return get_c_type(type_str)
 
-    enums = spec['enums']
-    enum_item = next((item for item in enums if item["name"] == type), None)
+    enums = spec.get('enums', [])
+    enum_item = next((item for item in enums if item["name"] == type_str), None)
     if enum_item:
         program = spec['program']
-        return f"rpc_{program}_{type}_t"
+        return f"rpc_{program}_{type_str}_t"
 
-    raise ValueError(f"Unknown field type: {type}")
+    raise ValueError(f"Unknown field type: {type_str}")
 
 
-def get_field_declaration(spec: Dict[str, Any], field: Dict[str, Any]) -> str:
-    """Return a C field declaration for a given JSON5 field."""
+def get_field_declaration(spec: Dict[str, Any], field: Dict[str, Any], indent="    ") -> str:
     json_type = field['type']
     name = field['name']
-    if json_type == 'string':
-        max_length = field.get('max_length', field.get('max_len', DEFAULT_STRING_MAX))
-        return f"char {name}[{max_length}]"
+    max_elements = field.get('max_elements', 1)
 
-    type = get_field_type(spec, field)
-    return f"{type} {name}"
+    if max_elements == 0:
+        raise ValueError(f"max_elements cannot be 0 for field '{name}'")
+
+    is_array = max_elements > 1
+    is_struct = json_type == 'struct'
+
+    if is_struct:
+        lines = []
+        if is_array:
+            lines.append(f"uint32_t {name}_count;")
+            lines.append(f"{indent}struct {{")
+        else:
+            lines.append(f"struct {{")
+
+        for subfield in field.get('contents', []):
+            if 'description' in subfield:
+                lines.append(f"{indent}    /* {subfield['description']} */")
+
+            sub_type = subfield['type']
+            sub_max = subfield.get('max_elements', 1)
+
+            if sub_max == 0:
+                raise ValueError(f"max_elements cannot be 0 for subfield '{subfield['name']}'")
+            if sub_type == 'struct' or sub_max > 1:
+                raise ValueError(f"Nested structs/arrays are not supported in field '{name}'.")
+
+            if sub_type == 'string':
+                max_length = subfield.get('max_length', subfield.get('max_len', DEFAULT_STRING_MAX))
+                lines.append(f"{indent}    char {subfield['name']}[{max_length}];")
+            else:
+                c_type = get_field_type(spec, subfield)
+                lines.append(f"{indent}    {c_type} {subfield['name']};")
+
+        if is_array:
+            lines.append(f"{indent}}} {name}[{max_elements}]")
+        else:
+            lines.append(f"{indent}}} {name}")
+
+        return "\n".join(lines)
+
+    elif json_type == 'string':
+        max_length = field.get('max_length', field.get('max_len', DEFAULT_STRING_MAX))
+        if is_array:
+            return f"uint32_t {name}_count;\n{indent}char {name}[{max_elements}][{max_length}]"
+        else:
+            return f"char {name}[{max_length}]"
+
+    else:
+        c_type = get_field_type(spec, field)
+        if is_array:
+            return f"uint32_t {name}_count;\n{indent}{c_type} {name}[{max_elements}]"
+        else:
+            return f"{c_type} {name}"
 
 
 def get_type_size(spec: Dict[str, Any], field: Dict[str, Any]) -> str:
-    """Return a C type size for a given JSON5 field."""
     field_type = field['type']
+
+    if field_type == 'struct':
+        return 'struct'
 
     if field_type in TYPE_MAPPING:
         return field_type
@@ -87,56 +128,32 @@ def get_type_size(spec: Dict[str, Any], field: Dict[str, Any]) -> str:
     enum_item = next((item for item in enums if item["name"] == field_type), None)
 
     if enum_item:
-        min_val = 0
-        max_val = 0
-        current_val = -1 # Starts at -1, so the first element without a 'value' becomes 0
-
-        # Iterate through all items in the enum to find the lowest and highest value
+        min_val, max_val, current_val = 0, 0, -1
         for item in enum_item.get('items', []):
             if 'value' in item:
-                # Handle both regular integers and hex values (e.g., '0x1F') in strings
-                val_str = item['value']
-                if val_str.lower().startswith('0x'):
-                    current_val = int(val_str, 16)
-                else:
-                    current_val = int(val_str)
+                val_str = str(item['value'])
+                # Use eval to support bitwise operations like (1 << 0)
+                current_val = eval(val_str)
             else:
-                # If no value is specified, it is the previous one + 1
                 current_val += 1
+            if current_val < min_val: min_val = current_val
+            if current_val > max_val: max_val = current_val
 
-            # Update min and max
-            if current_val < min_val:
-                min_val = current_val
-            if current_val > max_val:
-                max_val = current_val
-
-        # Determine the smallest C type based on min_val and max_val
         if min_val >= 0:
-            # Unsigned types
-            if max_val <= 255:
-                return 'u8'
-            elif max_val <= 65535:
-                return 'u16'
-            elif max_val <= 4294967295:
-                return 'u32'
-            else:
-                return 'u64'
+            if max_val <= 255: return 'u8'
+            elif max_val <= 65535: return 'u16'
+            elif max_val <= 4294967295: return 'u32'
+            else: return 'u64'
         else:
-            # Signed types (if there are negative values in your enum)
-            if min_val >= -128 and max_val <= 127:
-                return 'i8'
-            elif min_val >= -32768 and max_val <= 32767:
-                return 'i16'
-            elif min_val >= -2147483648 and max_val <= 2147483647:
-                return 'i32'
-            else:
-                return 'i64'
+            if min_val >= -128 and max_val <= 127: return 'i8'
+            elif min_val >= -32768 and max_val <= 32767: return 'i16'
+            elif min_val >= -2147483648 and max_val <= 2147483647: return 'i32'
+            else: return 'i64'
 
     raise ValueError(f"Unknown field type: {field_type}")
 
 
 def render_c_default(field: Dict[str, Any]) -> str:
-    """Render a C initializer or default value for a field."""
     default = field['default']
     if field['type'] == 'string':
         return json.dumps(default)
@@ -144,7 +161,6 @@ def render_c_default(field: Dict[str, Any]) -> str:
 
 
 def to_macro_name(name: str) -> str:
-    """Convert camelCase/snake_case to UPPER_CASE macro name."""
     result = []
     for i, char in enumerate(name):
         if char.isupper() and i > 0:
@@ -154,81 +170,202 @@ def to_macro_name(name: str) -> str:
 
 
 def to_function_name(program: str, procedure: str, suffix: str = '') -> str:
-    """Generate function name from program and procedure."""
     base = f"rpc_{program}_{procedure}"
     return f"{base}_{suffix}" if suffix else base
 
 
 def get_debug_printf_format(json_type: str) -> str:
-    """Return a printf format fragment for debug output of a JSON type."""
     mapping = {
-        'u8': '%"PRIu8"',
-        'u16': '%"PRIu16"',
-        'u32': '%"PRIu32"',
-        'u64': '%"PRIu64"',
-        'i8': '%"PRId8"',
-        'i16': '%"PRId16"',
-        'i32': '%"PRId32"',
-        'i64': '%"PRId64"',
-        'x8': '0x%"PRIx8"',
-        'x16': '0x%"PRIx16"',
-        'x32': '0x%"PRIx32"',
-        'x64': '0x%"PRIx64"',
-        'f32': '%f',
-        'f64': '%f',
-        'string': '%s',
+        'u8': '%"PRIu8"', 'u16': '%"PRIu16"', 'u32': '%"PRIu32"', 'u64': '%"PRIu64"',
+        'i8': '%"PRId8"', 'i16': '%"PRId16"', 'i32': '%"PRId32"', 'i64': '%"PRId64"',
+        'x8': '0x%"PRIx8"', 'x16': '0x%"PRIx16"', 'x32': '0x%"PRIx32"', 'x64': '0x%"PRIx64"',
+        'f32': '%f', 'f64': '%f', 'string': '%s',
     }
     return mapping.get(json_type, '%"PRIu32"')
 
 
+# ---- Flat Generation Helpers for Push / Pop / Debug ----
+
+def get_push_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg_name: str, is_result: bool, indent: str = "    ") -> List[str]:
+    lines = []
+    push_pfx = "rpc_result_push" if is_result else "rpc_request_push"
+    name = field['name']
+
+    max_elements = field.get('max_elements', 1)
+    if max_elements == 0:
+        raise ValueError(f"max_elements cannot be 0 for field '{name}'")
+
+    is_array = max_elements > 1
+    is_struct = field['type'] == 'struct'
+
+    if is_array:
+        lines.append(f"{indent}{push_pfx}_uint32({prefix}{name}_count, {msg_name});")
+        lines.append(f"{indent}for (uint32_t i_{name} = 0; i_{name} < {prefix}{name}_count; i_{name}++) {{")
+
+        if is_struct:
+            for subfield in field.get('contents', []):
+                if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                    raise ValueError(f"Nested structs/arrays are not supported in '{name}'.")
+                elif subfield['type'] == 'string':
+                    lines.append(f"{indent}    {push_pfx}_string({prefix}{name}[i_{name}].{subfield['name']}, {msg_name});")
+                else:
+                    c_type = get_c_type(get_type_size(spec, subfield))
+                    suffix = c_type.replace('_t', '')
+                    lines.append(f"{indent}    {push_pfx}_{suffix}({prefix}{name}[i_{name}].{subfield['name']}, {msg_name});")
+        elif field['type'] == 'string':
+            lines.append(f"{indent}    {push_pfx}_string({prefix}{name}[i_{name}], {msg_name});")
+        else:
+            type_size = get_type_size(spec, field)
+            c_type = get_c_type(type_size)
+            suffix = c_type.replace('_t', '')
+            lines.append(f"{indent}    {push_pfx}_{suffix}({prefix}{name}[i_{name}], {msg_name});")
+
+        lines.append(f"{indent}}}")
+
+    elif is_struct:
+        for subfield in field.get('contents', []):
+            if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                raise ValueError(f"Nested structs/arrays are not supported in '{name}'.")
+            elif subfield['type'] == 'string':
+                lines.append(f"{indent}{push_pfx}_string({prefix}{name}.{subfield['name']}, {msg_name});")
+            else:
+                c_type = get_c_type(get_type_size(spec, subfield))
+                suffix = c_type.replace('_t', '')
+                lines.append(f"{indent}{push_pfx}_{suffix}({prefix}{name}.{subfield['name']}, {msg_name});")
+
+    elif field['type'] == 'string':
+        lines.append(f"{indent}{push_pfx}_string({prefix}{name}, {msg_name});")
+
+    else:
+        type_size = get_type_size(spec, field)
+        c_type = get_c_type(type_size)
+        suffix = c_type.replace('_t', '')
+        lines.append(f"{indent}{push_pfx}_{suffix}({prefix}{name}, {msg_name});")
+
+    return lines
+
+
+def get_pop_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg_name: str, offset_name: str, is_result: bool, indent: str = "    ") -> List[str]:
+    lines = []
+    pop_pfx = "rpc_result_pop" if is_result else "rpc_request_pop"
+    name = field['name']
+
+    max_elements = field.get('max_elements', 1)
+    if max_elements == 0:
+        raise ValueError(f"max_elements cannot be 0 for field '{name}'")
+
+    is_array = max_elements > 1
+    is_struct = field['type'] == 'struct'
+
+    if is_array:
+        lines.append(f"{indent}{prefix}{name}_count = {pop_pfx}_uint32({msg_name}, {offset_name});")
+        lines.append(f"{indent}if ({prefix}{name}_count > {max_elements}) {prefix}{name}_count = {max_elements};")
+        lines.append(f"{indent}for (uint32_t i_{name} = 0; i_{name} < {prefix}{name}_count; i_{name}++) {{")
+
+        if is_struct:
+            for subfield in field.get('contents', []):
+                if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                    raise ValueError(f"Nested structs/arrays are not supported in '{name}'.")
+                elif subfield['type'] == 'string':
+                    lines.append(f"{indent}    {pop_pfx}_string({prefix}{name}[i_{name}].{subfield['name']}, {msg_name}, {offset_name});")
+                else:
+                    c_type = get_c_type(get_type_size(spec, subfield))
+                    suffix = c_type.replace('_t', '')
+                    lines.append(f"{indent}    {prefix}{name}[i_{name}].{subfield['name']} = {pop_pfx}_{suffix}({msg_name}, {offset_name});")
+        elif field['type'] == 'string':
+            lines.append(f"{indent}    {pop_pfx}_string({prefix}{name}[i_{name}], {msg_name}, {offset_name});")
+        else:
+            type_size = get_type_size(spec, field)
+            c_type = get_c_type(type_size)
+            suffix = c_type.replace('_t', '')
+            lines.append(f"{indent}    {prefix}{name}[i_{name}] = {pop_pfx}_{suffix}({msg_name}, {offset_name});")
+
+        lines.append(f"{indent}}}")
+
+    elif is_struct:
+        for subfield in field.get('contents', []):
+            if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                raise ValueError(f"Nested structs/arrays are not supported in '{name}'.")
+            elif subfield['type'] == 'string':
+                lines.append(f"{indent}{pop_pfx}_string({prefix}{name}.{subfield['name']}, {msg_name}, {offset_name});")
+            else:
+                c_type = get_c_type(get_type_size(spec, subfield))
+                suffix = c_type.replace('_t', '')
+                lines.append(f"{indent}{prefix}{name}.{subfield['name']} = {pop_pfx}_{suffix}({msg_name}, {offset_name});")
+
+    elif field['type'] == 'string':
+        lines.append(f"{indent}{pop_pfx}_string({prefix}{name}, {msg_name}, {offset_name});")
+
+    else:
+        type_size = get_type_size(spec, field)
+        c_type = get_c_type(type_size)
+        suffix = c_type.replace('_t', '')
+        lines.append(f"{indent}{prefix}{name} = {pop_pfx}_{suffix}({msg_name}, {offset_name});")
+
+    return lines
+
+
+def get_debug_print_lines(spec: Dict[str, Any], field: Dict[str, Any], path_prefix: str, val_prefix: str, indent: str = "    ") -> List[str]:
+    lines = []
+    name = field['name']
+
+    max_elements = field.get('max_elements', 1)
+    if max_elements == 0:
+        raise ValueError(f"max_elements cannot be 0 for field '{name}'")
+
+    is_array = max_elements > 1
+    is_struct = field['type'] == 'struct'
+
+    if is_array:
+        lines.append(f'{indent}printf("RPC: {path_prefix}{name}_count=%"PRIu32"\\n", {val_prefix}{name}_count);')
+        lines.append(f"{indent}for (uint32_t i_{name} = 0; i_{name} < {val_prefix}{name}_count; i_{name}++) {{")
+
+        if is_struct:
+            for subfield in field.get('contents', []):
+                if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                    raise ValueError("Nested structs/arrays are not supported.")
+                elif subfield['type'] == 'string':
+                    lines.append(f'{indent}    printf("RPC: {path_prefix}{name}[%"PRIu32"].{subfield["name"]}=%s\\n", i_{name}, {val_prefix}{name}[i_{name}].{subfield["name"]});')
+                else:
+                    fmt = get_debug_printf_format(get_type_size(spec, subfield))
+                    lines.append(f'{indent}    printf("RPC: {path_prefix}{name}[%"PRIu32"].{subfield["name"]}={fmt}\\n", i_{name}, {val_prefix}{name}[i_{name}].{subfield["name"]});')
+        elif field['type'] == 'string':
+            lines.append(f'{indent}    printf("RPC: {path_prefix}{name}[%"PRIu32"]=%s\\n", i_{name}, {val_prefix}{name}[i_{name}]);')
+        else:
+            fmt = get_debug_printf_format(get_type_size(spec, field))
+            lines.append(f'{indent}    printf("RPC: {path_prefix}{name}[%"PRIu32"]={fmt}\\n", i_{name}, {val_prefix}{name}[i_{name}]);')
+
+        lines.append(f"{indent}}}")
+
+    elif is_struct:
+        for subfield in field.get('contents', []):
+            if subfield['type'] == 'struct' or subfield.get('max_elements', 1) > 1:
+                raise ValueError("Nested structs/arrays are not supported.")
+            elif subfield['type'] == 'string':
+                lines.append(f'{indent}printf("RPC: {path_prefix}{name}.{subfield["name"]}=%s\\n", {val_prefix}{name}.{subfield["name"]});')
+            else:
+                fmt = get_debug_printf_format(get_type_size(spec, subfield))
+                lines.append(f'{indent}printf("RPC: {path_prefix}{name}.{subfield["name"]}={fmt}\\n", {val_prefix}{name}.{subfield["name"]});')
+
+    elif field['type'] == 'string':
+        lines.append(f'{indent}printf("RPC: {path_prefix}{name}=%s\\n", {val_prefix}{name});')
+
+    else:
+        fmt = get_debug_printf_format(get_type_size(spec, field))
+        lines.append(f'{indent}printf("RPC: {path_prefix}{name}={fmt}\\n", {val_prefix}{name});')
+
+    return lines
+
+
 def generate_common_header_enums(spec: Dict[str, Any], lines: List, program: str):
-    """Generate enums.
-
-       Exampel of json format:
-           enums: [
-               {
-                   name: 'route',
-                   items: [
-                       {
-                           name: 'route_x',
-                           value: '0',
-                           description: 'Route the data via x',
-                       },
-                       {
-                           name: 'route_y',
-                           description: 'Route the data via y',
-                       },
-                   ],
-               },
-           ],
-
-       C code generated:
-           typedef enum {
-               /* Route the data via x */
-               RPC_XX_ROUTE_X = 0,
-               /* Route the data via y */
-               RPC_XX_ROUTE_Y,
-           } rpc_xx_route_t;
-
-       Using the enum:
-           {
-               name: 'route',
-               description: 'x:0, y:1',
-               type: 'route',
-           },
-
-       C code generated:
-           /* x:0, y:1 */
-           rpc_xx_route_t route;
-    """
-
     if 'enums' not in spec.keys():
         return
-
     program_upper = to_macro_name(program)
     enums = spec['enums']
     for enum in enums:
         lines.append("")
+        if 'description' in enum:
+            lines.append(f"/* {enum['description']} */")
         lines.append("typedef enum {")
         for item in enum['items']:
             if 'description' in item.keys():
@@ -244,12 +381,11 @@ def generate_common_header_enums(spec: Dict[str, Any], lines: List, program: str
 
 
 def generate_common_header(spec: Dict[str, Any]) -> str:
-    """Generate the shared common header file content."""
     program = spec['program']
     program_upper = to_macro_name(program)
     address = spec['address']
     procedures = spec['procedures']
-    
+
     lines = []
     guard = f"RPC_{program_upper}_H"
     lines.append(f"#ifndef {guard}")
@@ -263,6 +399,8 @@ def generate_common_header(spec: Dict[str, Any]) -> str:
     lines.append(f"#define RPC_PROGRAM_{program_upper} {hex(address)}")
     lines.append("")
     for proc in procedures:
+        if 'description' in proc:
+            lines.append(f"/* {proc['description']} */")
         proc_upper = to_macro_name(proc['name'])
         proc_index = proc['index']
         lines.append(f"#define RPC_{program_upper}_{proc_upper} {proc_index}")
@@ -270,31 +408,35 @@ def generate_common_header(spec: Dict[str, Any]) -> str:
     generate_common_header_enums(spec, lines, program)
 
     lines.append("")
-    lines.append("/* Request and Response Structures */")
     for proc in procedures:
         proc_name = proc['name']
+
+        if 'description' in proc:
+            lines.append(f"/* Procedure: {proc_name} - {proc['description']} */")
+
         request_typedef = f"rpc_{program}_{proc_name}_request_t"
         lines.append(f"typedef struct {{")
         for field in proc['request']:
             if 'description' in field.keys():
                 lines.append(f"    /* {field['description']} */")
-            lines.append(f"    {get_field_declaration(spec, field)};")
+            lines.append(f"    {get_field_declaration(spec, field, '    ')};")
         lines.append(f"}} {request_typedef};")
         lines.append("")
+
         response_typedef = f"rpc_{program}_{proc_name}_response_t"
         lines.append(f"typedef struct {{")
         for field in proc['response']:
             if 'description' in field.keys():
                 lines.append(f"    /* {field['description']} */")
-            lines.append(f"    {get_field_declaration(spec, field)};")
+            lines.append(f"    {get_field_declaration(spec, field, '    ')};")
         lines.append(f"}} {response_typedef};")
         lines.append("")
+
     lines.append(f"#endif /* {guard} */")
     return "\n".join(lines)
 
 
 def generate_client_header(spec: Dict[str, Any]) -> str:
-    """Generate the client-only header file content."""
     program = spec['program']
     program_upper = to_macro_name(program)
     procedures = spec['procedures']
@@ -312,23 +454,24 @@ def generate_client_header(spec: Dict[str, Any]) -> str:
         proc_name = proc['name']
         request_typedef = f"rpc_{program}_{proc_name}_request_t"
         response_typedef = f"rpc_{program}_{proc_name}_response_t"
-        non_default_fields = [f for f in proc['request'] if 'default' not in f]
+        non_default_fields = [f for f in proc['request'] if 'default' not in f and f.get('max_elements', 1) <= 1 and f['type'] != 'struct']
+
         if non_default_fields:
             init_params = ", ".join([f"{get_field_type(spec, f)} {f['name']}" for f in non_default_fields])
-            lines.append(f"{request_typedef} {to_function_name(program, proc_name, 'init')}({init_params});")
+            lines.append(f"int {to_function_name(program, proc_name, 'init')}({request_typedef} *request, {init_params});")
         else:
-            lines.append(f"{request_typedef} {to_function_name(program, proc_name, 'init')}(void);")
+            lines.append(f"int {to_function_name(program, proc_name, 'init')}({request_typedef} *request);")
+
         if maxresponses > 1:
             lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, uint32_t timeout, const {request_typedef} *request, {response_typedef} *response, uint32_t *numresponses);")
         else:
-            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, uint32_t timeout, const {request_typedef} *request, {response_typedef} *response);") 
+            lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, uint32_t timeout, const {request_typedef} *request, {response_typedef} *response);")
         lines.append("")
     lines.append(f"#endif /* {guard} */")
     return "\n".join(lines)
 
 
 def generate_server_header(spec: Dict[str, Any]) -> str:
-    """Generate the server-only header file content."""
     program = spec['program']
     program_upper = to_macro_name(program)
     procedures = spec['procedures']
@@ -359,46 +502,68 @@ def generate_server_header(spec: Dict[str, Any]) -> str:
 
 
 def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) -> str:
-    """Generate the client-side C implementation file content."""
     program = spec['program']
     procedures = spec['procedures']
-    
+
     lines = []
     lines.append(f'#include "rpc_{program}.h"')
     lines.append("#include <rpc_client.h>")
     lines.append("#include <string.h>")
+    lines.append("#include <assert.h>")
     if debug:
         lines.append("#include <stdio.h>")
+        lines.append("#include <inttypes.h>")
     lines.append("")
+
+    # Add size validation assert block
+    lines.append("/* Size Checks against CSP_BUFFER_SIZE */")
+    lines.append("static union {")
+    for proc in procedures:
+        proc_name = proc['name']
+        lines.append(f"    struct {{ rpc_{program}_{proc_name}_request_t t; }} __attribute__((packed)) {proc_name}_req;")
+        lines.append(f"    struct {{ rpc_{program}_{proc_name}_response_t t; }} __attribute__((packed)) {proc_name}_res;")
+    lines.append(f"}} rpc_{program}_packed_tmp;")
+    lines.append("")
+    lines.append(f'static_assert(sizeof(rpc_msg_t) + sizeof(rpc_{program}_packed_tmp) <= CSP_BUFFER_SIZE,')
+    lines.append(f'              "rpc_{program} messages are too large compared to CSP_BUFFER_SIZE");')
+    lines.append("")
+
     # Init functions
     for proc in procedures:
         proc_name = proc['name']
         request_typedef = f"rpc_{program}_{proc_name}_request_t"
-        non_default_fields = [f for f in proc['request'] if 'default' not in f]
+
+        non_default_fields = [f for f in proc['request'] if 'default' not in f and f.get('max_elements', 1) <= 1 and f['type'] != 'struct']
+
         if non_default_fields:
             init_params = ", ".join([f"{get_field_type(spec, f)} {f['name']}" for f in non_default_fields])
+            lines.append(f"int {to_function_name(program, proc_name, 'init')}({request_typedef} *request, {init_params}) {{")
         else:
-            init_params = "void"
-        lines.append(f"{request_typedef} {to_function_name(program, proc_name, 'init')}({init_params}) {{")
-        lines.append(f"    {request_typedef} request;")
-        for field in non_default_fields:
-                if field['type'] == 'string':
-                    lines.append(f"    strncpy(request.{field['name']}, {field['name']}, sizeof(request.{field['name']}));")
-                    lines.append(f"    request.{field['name']}[sizeof(request.{field['name']}) - 1] = 0;")
-                else:
-                    lines.append(f"    request.{field['name']} = {field['name']};")
+            lines.append(f"int {to_function_name(program, proc_name, 'init')}({request_typedef} *request) {{")
+
         for field in proc['request']:
-            if 'default' in field:
+            if field.get('max_elements', 1) > 1:
+                lines.append(f"    request->{field['name']}_count = 0;")
+
+        for field in non_default_fields:
+            if field['type'] == 'string':
+                lines.append(f"    strncpy(request->{field['name']}, {field['name']}, sizeof(request->{field['name']}));")
+                lines.append(f"    request->{field['name']}[sizeof(request->{field['name']}) - 1] = 0;")
+            else:
+                lines.append(f"    request->{field['name']} = {field['name']};")
+
+        for field in proc['request']:
+            if 'default' in field and field.get('max_elements', 1) <= 1 and field['type'] != 'struct':
                 default_value = render_c_default(field)
                 if field['type'] == 'string':
-                    lines.append(f"    strncpy(request.{field['name']}, {default_value}, sizeof(request.{field['name']}));")
-                    lines.append(f"    request.{field['name']}[sizeof(request.{field['name']}) - 1] = 0;")
+                    lines.append(f"    strncpy(request->{field['name']}, {default_value}, sizeof(request->{field['name']}));")
+                    lines.append(f"    request->{field['name']}[sizeof(request->{field['name']}) - 1] = 0;")
                 else:
-                    lines.append(f"    request.{field['name']} = {default_value};")
-        lines.append("    return request;")
+                    lines.append(f"    request->{field['name']} = {default_value};")
+        lines.append("    return 0;")
         lines.append("}")
         lines.append("")
-    
+
     # Client methods
     lines.append("/* Client Call Functions */")
     for proc in procedures:
@@ -408,6 +573,7 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         response_typedef = f"rpc_{program}_{proc_name}_response_t"
         program_upper = to_macro_name(program)
         proc_upper = to_macro_name(proc_name)
+
         if maxresponses > 1:
             lines.append(f"int {to_function_name(program, proc_name)}(uint16_t node, uint32_t timeout, const {request_typedef} *request, {response_typedef} *response, uint32_t *numresponses) {{")
         else:
@@ -423,132 +589,146 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         lines.append("    }")
         lines.append("")
         lines.append("    /* Add request fields */")
+
         if debug:
             lines.append(f'    printf("RPC: Sending {proc_upper} call\\n");')
             for field in proc['request']:
-                type_size = get_type_size(spec, field)
-                fmt = get_debug_printf_format(type_size)
-                name = field['name']
-                lines.append(f'    printf("RPC: {name}={fmt}\\n", request->{name});')
+                lines.extend(get_debug_print_lines(spec, field, "", "request->", "    "))
             lines.append("")
+
         for field in proc['request']:
-            field_type = field['type']
-            if field_type == 'string':
-                lines.append(f"    rpc_request_push_string(request->{field['name']}, request_msg);")
-            else:
-                type_size = get_type_size(spec, field)
-                c_type = get_c_type(type_size)
-                if c_type == 'int32_t':
-                    push_func = 'rpc_request_push_int32'
-                elif c_type == 'int16_t':
-                    push_func = 'rpc_request_push_int16'
-                elif c_type == 'int8_t':
-                    push_func = 'rpc_request_push_int8'
-                elif c_type == 'uint32_t':
-                    push_func = 'rpc_request_push_uint32'
-                elif c_type == 'uint16_t':
-                    push_func = 'rpc_request_push_uint16'
-                elif c_type == 'uint8_t':
-                    push_func = 'rpc_request_push_uint8'
-                elif c_type == 'int64_t':
-                    push_func = 'rpc_request_push_int64'
-                elif c_type == 'uint64_t':
-                    push_func = 'rpc_request_push_uint64'
-                elif c_type == 'float':
-                    push_func = 'rpc_request_push_float'
-                elif c_type == 'double':
-                    push_func = 'rpc_request_push_double'
-                else:
-                    push_func = 'rpc_request_push_uint32'
-                lines.append(f"    {push_func}(request->{field['name']}, request_msg);")
+            lines.extend(get_push_lines(spec, field, "request->", "request_msg", False, "    "))
         lines.append("")
+
         lines.append("    rpc_send(conn, request_msg);")
         lines.append("")
-        lines.append("    uint32_t idx = 0;")
-        lines.append("    do {")
-        if len(proc['response']) > 0:
-            lines.append("        uint16_t offset = 0;")
-            lines.append("")
-        lines.append(f"        status = rpc_get_reply(conn, &reply_msg, {maxresponses if maxresponses > 1 else 1}, idx, timeout);")
-        lines.append("        if (status != RPC_STATUS_OK) {")
-        lines.append("            rpc_disconnect(conn);")
-        lines.append("            return status;")
-        lines.append("        }")
-        lines.append("")
-        lines.append("        /* Extract response fields */")
-        for field in proc['response']:
-            field_type = field['type']
-            if field_type == 'string':
-                lines.append(f"        rpc_result_pop_string(response[idx].{field['name']}, reply_msg, &offset);")
-            else:
-                type_size = get_type_size(spec, field)
-                c_type = get_c_type(type_size)
-                if c_type == 'int32_t':
-                    pop_func = 'rpc_result_pop_int32'
-                elif c_type == 'int16_t':
-                    pop_func = 'rpc_result_pop_int16'
-                elif c_type == 'int8_t':
-                    pop_func = 'rpc_result_pop_int8'
-                elif c_type == 'uint32_t':
-                    pop_func = 'rpc_result_pop_uint32'
-                elif c_type == 'uint16_t':
-                    pop_func = 'rpc_result_pop_uint16'
-                elif c_type == 'uint8_t':
-                    pop_func = 'rpc_result_pop_uint8'
-                elif c_type == 'int64_t':
-                    pop_func = 'rpc_result_pop_int64'
-                elif c_type == 'uint64_t':
-                    pop_func = 'rpc_result_pop_uint64'
-                elif c_type == 'float':
-                    pop_func = 'rpc_result_pop_float'
-                elif c_type == 'double':
-                    pop_func = 'rpc_result_pop_double'
-                else:
-                    pop_func = 'rpc_result_pop_uint32'
-                lines.append(f"        response[idx].{field['name']} = {pop_func}(reply_msg, &offset);")
-        lines.append("")
-        if debug:
-            lines.append(f'        printf("RPC: Receiving {proc_upper} response idx=%"PRIu32"\\n", idx);')
-            for field in proc['response']:
-                type_size = get_type_size(spec, field)
-                fmt = get_debug_printf_format(type_size)
-                name = field['name']
-                lines.append(f'        printf("RPC: response[%"PRIu32"].{name}={fmt}\\n", idx, response[idx].{name});')
-            lines.append("")
-        lines.append("        rpc_buffer_free(reply_msg);")
-        lines.append("        idx++;")
-        lines.append("")
-        lines.append("    } while (idx < reply_msg->reply.amount);")
-        lines.append("")
+
         if maxresponses > 1:
+            lines.append("    uint32_t max_req_responses = *numresponses;")
+            lines.append("    uint32_t idx = 0;")
+            lines.append("    while (idx < max_req_responses) {")
+
+            if len(proc['response']) > 0:
+                lines.append("        uint16_t offset = 0;")
+                lines.append("")
+
+            lines.append(f"        status = rpc_get_reply(conn, &reply_msg, {maxresponses}, idx, timeout);")
+            lines.append("        if (status != RPC_STATUS_OK) {")
+            lines.append("            rpc_disconnect(conn);")
+            lines.append("            return status;")
+            lines.append("        }")
+            lines.append("")
+            lines.append("        /* Extract response fields */")
+
+            for field in proc['response']:
+                lines.extend(get_pop_lines(spec, field, "response[idx].", "reply_msg", "&offset", True, "        "))
+            lines.append("")
+
+            if debug:
+                lines.append(f'        printf("RPC: Receiving {proc_upper} response idx=%"PRIu32"\\n", idx);')
+                for field in proc['response']:
+                    lines.extend(get_debug_print_lines(spec, field, "response[idx].", "response[idx].", "        "))
+                lines.append("")
+
+            lines.append("        uint32_t amount = reply_msg->reply.amount;")
+            lines.append("        rpc_buffer_free(reply_msg);")
+            lines.append("        idx++;")
+            lines.append("")
+            lines.append("        if (idx >= amount) {")
+            lines.append("            break;")
+            lines.append("        }")
+            lines.append("    }")
+            lines.append("")
             lines.append("    *numresponses = idx;")
+        else:
+            if len(proc['response']) > 0:
+                lines.append("    uint16_t offset = 0;")
+                lines.append("")
+
+            lines.append("    status = rpc_get_reply(conn, &reply_msg, 1, 0, timeout);")
+            lines.append("    if (status != RPC_STATUS_OK) {")
+            lines.append("        rpc_disconnect(conn);")
+            lines.append("        return status;")
+            lines.append("    }")
+            lines.append("")
+            lines.append("    /* Extract response fields */")
+
+            for field in proc['response']:
+                lines.extend(get_pop_lines(spec, field, "response->", "reply_msg", "&offset", True, "    "))
+            lines.append("")
+
+            if debug:
+                lines.append(f'    printf("RPC: Receiving {proc_upper} response\\n");')
+                for field in proc['response']:
+                    lines.extend(get_debug_print_lines(spec, field, "response->", "response->", "    "))
+                lines.append("")
+
+            lines.append("    rpc_buffer_free(reply_msg);")
+
         lines.append("")
         lines.append("    return rpc_disconnect(conn);")
         lines.append("}")
         lines.append("")
-    
+
     return "\n".join(lines)
 
 
-
 def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) -> str:
-    """Generate the server-side C implementation file content."""
     program = spec['program']
     procedures = spec['procedures']
-    
+
     lines = []
     lines.append(f'#include "rpc_{program}_server.h"')
     lines.append('#include <endian.h>')
     lines.append('#include <inttypes.h>')
     lines.append("#include <string.h>")
+    lines.append("#include <assert.h>")
     if debug:
         lines.append('#include <stdio.h>')
     lines.append("")
+
+    # Add size validation assert block
+    lines.append("/* Size Checks against CSP_BUFFER_SIZE */")
+    lines.append("static union {")
+    for proc in procedures:
+        proc_name = proc['name']
+        lines.append(f"    struct {{ rpc_{program}_{proc_name}_request_t t; }} __attribute__((packed)) {proc_name}_req;")
+        lines.append(f"    struct {{ rpc_{program}_{proc_name}_response_t t; }} __attribute__((packed)) {proc_name}_res;")
+    lines.append(f"}} rpc_{program}_packed_tmp;")
+    lines.append("")
+    lines.append(f'static_assert(sizeof(rpc_msg_t) + sizeof(rpc_{program}_packed_tmp) <= CSP_BUFFER_SIZE,')
+    lines.append(f'              "rpc_{program} messages are too large compared to CSP_BUFFER_SIZE");')
+    lines.append("")
+
     lines.append("/* Server Handler Dispatcher */")
     program_upper = to_macro_name(program)
     lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, csp_conn_t *conn, rpc_msg_t *call) {{")
     lines.append("")
+
+    # Create unified buffers to minimize stack and overall BSS usage
+    lines.append("    static union {")
+    for proc in procedures:
+        proc_name = proc['name']
+        request_typedef = f"rpc_{program}_{proc_name}_request_t"
+        lines.append(f"        {request_typedef} {proc_name};")
+    lines.append("    } req_buf;")
+    lines.append("")
+
+    lines.append("    static union {")
+    for proc in procedures:
+        proc_name = proc['name']
+        response_typedef = f"rpc_{program}_{proc_name}_response_t"
+        maxresponses = proc.get('maxresponses', 1)
+        lines.append(f"        {response_typedef} {proc_name}[{maxresponses}];")
+    lines.append("    } res_buf;")
+    lines.append("")
+
+    lines.append("    memset(&req_buf, 0, sizeof(req_buf));")
+    lines.append("    memset(&res_buf, 0, sizeof(res_buf));")
+    lines.append("")
+
     lines.append("    switch (procedure) {")
+
     for proc in procedures:
         proc_name = proc['name']
         proc_upper = to_macro_name(proc_name)
@@ -556,104 +736,65 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
         request_typedef = f"rpc_{program}_{proc_name}_request_t"
         response_typedef = f"rpc_{program}_{proc_name}_response_t"
         maxresponses = proc.get('maxresponses', 1)
+
         lines.append(f"        case RPC_{program_upper}_{proc_upper}: /* {proc_index} */")
         lines.append("        {")
-        lines.append(f"            {request_typedef} request;")
-        lines.append(f"            {response_typedef} response[{maxresponses}];")
-        lines.append(f"            uint32_t numresponses = {maxresponses};")
+        lines.append(f"            {request_typedef} *request = &req_buf.{proc_name};")
+        lines.append(f"            {response_typedef} *response = res_buf.{proc_name};")
+
+        if maxresponses > 1:
+            lines.append(f"            uint32_t numresponses = {maxresponses};")
+
         if len(proc['request']) > 0:
-            lines.append( "            uint16_t offset = 0;")
+            lines.append("            uint16_t offset = 0;")
         lines.append("")
+
         for field in proc['request']:
-            field_type = field['type']
-            if field_type == 'string':
-                lines.append(f"            char *{field['name']}_ptr = request.{field['name']};")
-                lines.append(f"            rpc_request_pop_string({field['name']}_ptr, call, &offset);")
-            else:
-                type_size = get_type_size(spec, field)
-                c_type = get_c_type(type_size)
-                if c_type == 'int32_t':
-                    pop_func = 'rpc_request_pop_int32'
-                elif c_type == 'int16_t':
-                    pop_func = 'rpc_request_pop_int16'
-                elif c_type == 'int8_t':
-                    pop_func = 'rpc_request_pop_int8'
-                elif c_type == 'uint32_t':
-                    pop_func = 'rpc_request_pop_uint32'
-                elif c_type == 'uint16_t':
-                    pop_func = 'rpc_request_pop_uint16'
-                elif c_type == 'uint8_t':
-                    pop_func = 'rpc_request_pop_uint8'
-                elif c_type == 'int64_t':
-                    pop_func = 'rpc_request_pop_int64'
-                elif c_type == 'uint64_t':
-                    pop_func = 'rpc_request_pop_uint64'
-                elif c_type == 'float':
-                    pop_func = 'rpc_request_pop_float'
-                elif c_type == 'double':
-                    pop_func = 'rpc_request_pop_double'
-                else:
-                    pop_func = 'rpc_request_pop_uint32'
-                lines.append(f"            request.{field['name']} = {pop_func}(call, &offset);")
+            lines.extend(get_pop_lines(spec, field, "request->", "call", "&offset", False, "            "))
         lines.append("")
+
         if debug:
             lines.append(f'            printf("RPC: Received {proc_upper} call\\n");')
             for field in proc['request']:
-                type_size = get_type_size(spec, field)
-                fmt = get_debug_printf_format(type_size)
-                name = field['name']
-                lines.append(f'            printf("RPC: {name}={fmt}\\n", request.{name});')
+                lines.extend(get_debug_print_lines(spec, field, "", "request->", "            "))
             lines.append("")
+
         if maxresponses > 1:
-            lines.append(f"            {to_function_name(program, proc_name, 'host')}(&request, response, &numresponses);")
+            lines.append(f"            {to_function_name(program, proc_name, 'host')}(request, response, &numresponses);")
             lines.append("")
             lines.append(f"            if (numresponses == 0) return sizeof({response_typedef});")
         else:
-            lines.append(f"            {to_function_name(program, proc_name, 'host')}(&request, response);")
+            lines.append(f"            {to_function_name(program, proc_name, 'host')}(request, response);")
         lines.append("")
-        lines.append("            for (uint32_t i = 0; i < numresponses; i++) {")
-        if debug:
-            lines.append(f'                printf("RPC: Sending {proc_upper} response idx=%"PRIu32"\\n", i);')
+
+        if maxresponses > 1:
+            lines.append("            for (uint32_t i_resp = 0; i_resp < numresponses; i_resp++) {")
+            if debug:
+                lines.append(f'                printf("RPC: Sending {proc_upper} response idx=%"PRIu32"\\n", i_resp);')
+                for field in proc['response']:
+                    lines.extend(get_debug_print_lines(spec, field, "response[i_resp].", "response[i_resp].", "                "))
+
+            lines.append("                rpc_msg_t *reply = rpc_result_prepare(call, numresponses, i_resp);")
             for field in proc['response']:
-                type_size = get_type_size(spec, field)
-                fmt = get_debug_printf_format(type_size)
-                name = field['name']
-                lines.append(f'                printf("RPC: response[%"PRIu32"].{name}={fmt}\\n", i, response[i].{name});')
-        lines.append("                rpc_msg_t *reply = rpc_result_prepare(call, numresponses, i);")
-        for field in proc['response']:
-            field_type = field['type']
-            if field_type == 'string':
-                lines.append(f"                rpc_result_push_string(response[i].{field['name']}, reply);")
-            else:
-                type_size = get_type_size(spec, field)
-                c_type = get_c_type(type_size)
-                if c_type == 'int32_t':
-                    push_func = 'rpc_result_push_int32'
-                elif c_type == 'int16_t':
-                    push_func = 'rpc_result_push_int16'
-                elif c_type == 'int8_t':
-                    push_func = 'rpc_result_push_int8'
-                elif c_type == 'uint32_t':
-                    push_func = 'rpc_result_push_uint32'
-                elif c_type == 'uint16_t':
-                    push_func = 'rpc_result_push_uint16'
-                elif c_type == 'uint8_t':
-                    push_func = 'rpc_result_push_uint8'
-                elif c_type == 'int64_t':
-                    push_func = 'rpc_result_push_int64'
-                elif c_type == 'uint64_t':
-                    push_func = 'rpc_result_push_uint64'
-                elif c_type == 'float':
-                    push_func = 'rpc_result_push_float'
-                elif c_type == 'double':
-                    push_func = 'rpc_result_push_double'
-                else:
-                    push_func = 'rpc_result_push_int32'
-                lines.append(f"                {push_func}(response[i].{field['name']}, reply);")
-        lines.append(f"                rpc_send_reply(conn, reply);")
-        lines.append("            }")
+                lines.extend(get_push_lines(spec, field, "response[i_resp].", "reply", True, "                "))
+
+            lines.append(f"                rpc_send_reply(conn, reply);")
+            lines.append("            }")
+        else:
+            if debug:
+                lines.append(f'            printf("RPC: Sending {proc_upper} response\\n");')
+                for field in proc['response']:
+                    lines.extend(get_debug_print_lines(spec, field, "response->", "response->", "            "))
+
+            lines.append("            rpc_msg_t *reply = rpc_result_prepare(call, 1, 0);")
+            for field in proc['response']:
+                lines.extend(get_push_lines(spec, field, "response->", "reply", True, "            "))
+
+            lines.append(f"            rpc_send_reply(conn, reply);")
+
         lines.append("            break;")
         lines.append("        }")
+
     lines.append("        default:")
     lines.append("            break;")
     lines.append("    }")
@@ -663,9 +804,7 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
     return "\n".join(lines)
 
 
-def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str = 'both', debug: bool = False):
-    """Generate C files from JSON5 specification."""
-    # Parse JSON5 file
+def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str = 'both', debug: bool = False, copy_headers: bool = True):
     spec = None
     try:
         with open(json_file, 'r') as f:
@@ -679,58 +818,66 @@ def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str =
             raise
 
     program = spec['program']
-    
+
     if mode not in ('client', 'server', 'both'):
         raise ValueError("mode must be 'client', 'server', or 'both'")
-    
-    # Determine output directory
+
     if output_dir is None:
         output_dir = os.path.dirname(json_file) or '.'
-    
+
     os.makedirs(output_dir, exist_ok=True)
-    output_dir_header = os.path.join(output_dir, "../")
-    
+
     common_header = os.path.join(output_dir, f"rpc_{program}.h")
     with open(common_header, 'w') as f:
         f.write(generate_common_header(spec))
-    shutil.copy(common_header, output_dir_header)
 
     if mode in ('client', 'both'):
         client_header = os.path.join(output_dir, f"rpc_{program}_client.h")
         with open(client_header, 'w') as f:
             f.write(generate_client_header(spec))
-        shutil.copy(client_header, output_dir_header)
         client_file = os.path.join(output_dir, f"rpc_{program}_client.c")
         with open(client_file, 'w') as f:
             f.write(generate_client_implementation(spec, debug))
-    
+
     if mode in ('server', 'both'):
         server_header = os.path.join(output_dir, f"rpc_{program}_server.h")
         with open(server_header, 'w') as f:
             f.write(generate_server_header(spec))
-        shutil.copy(server_header, output_dir_header)
         server_file = os.path.join(output_dir, f"rpc_{program}_server.c")
         with open(server_file, 'w') as f:
             f.write(generate_server_implementation(spec, debug))
 
+    if copy_headers:
+        parent_dir = os.path.join(output_dir, '..')
+        shutil.copy(common_header, parent_dir)
+        if mode in ('client', 'both'):
+            shutil.copy(client_header, parent_dir)
+        if mode in ('server', 'both'):
+            shutil.copy(server_header, parent_dir)
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 generate_rpc.py <json_file> [output_dir] [mode] [debug]")
+        print("Usage: python3 generate_rpc.py <json_file> [output_dir] [mode] [debug] [no-copy]")
         print("mode = client | server | both (default)")
-        print("debug = true | false (default)")
+        print("debug = debug | (omitted for false)")
+        print("no-copy = disables copying header files to the parent directory (../)")
         sys.exit(1)
-    
+
     json_file = sys.argv[1]
     output_dir = None
     mode = 'both'
     debug = False
+    copy_headers = True
+
     for i in range(2, len(sys.argv)):
         arg = sys.argv[i].lower()
         if arg in ('client', 'server', 'both'):
             mode = arg
         elif arg == 'debug':
             debug = True
+        elif arg == 'no-copy':
+            copy_headers = False
         else:
             if output_dir is not None:
                 print(f"Error: Unrecognized argument: {sys.argv[i]}")
@@ -742,7 +889,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        generate_files(json_file, output_dir, mode, debug)
+        generate_files(json_file, output_dir, mode, debug, copy_headers)
     except Exception as e:
-        print(f"Error: {e}")
+        print("FATAL ERROR GENERATING CODE:")
+        traceback.print_exc()
         sys.exit(1)
