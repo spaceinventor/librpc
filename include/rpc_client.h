@@ -6,6 +6,9 @@ typedef enum {
     RPC_PROTOCOL_RDP = 0,
     RPC_PROTOCOL_DTP = 1,
     RPC_PROTOCOL_XTX = 2,
+    RPC_PROTOCOL_V2_RDP = 3,
+    RPC_PROTOCOL_V2_DTP = 4,
+    RPC_PROTOCOL_V2_XTX = 5,
 } rpc_protocol_t;
 
 extern int rpc_build_request(uint16_t node, uint32_t program, uint32_t procedure, csp_conn_t ** conn, rpc_msg_t **req_msg);
