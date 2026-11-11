@@ -541,6 +541,9 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         else:
             lines.append(f"int {to_function_name(program, proc_name, 'init')}({request_typedef} *request) {{")
 
+        if len(proc['request']) == 0:
+            lines.append("    (void)request;")
+
         for field in proc['request']:
             if field.get('max_elements', 1) > 1:
                 lines.append(f"    request->{field['name']}_count = 0;")
@@ -582,7 +585,13 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
         lines.append("    csp_conn_t *conn = NULL;")
         lines.append("    rpc_msg_t *request_msg = NULL;")
         lines.append("    rpc_msg_t *reply_msg = NULL;")
+
+        if len(proc['request']) == 0:
+            lines.append("    (void)request;")
+        if len(proc['response']) == 0:
+            lines.append("    (void)response;")
         lines.append("")
+
         lines.append(f"    int status = rpc_build_request(node, RPC_PROGRAM_{program_upper}, RPC_{program_upper}_{proc_upper}, &conn, &request_msg);")
         lines.append("    if (status != RPC_STATUS_OK) {")
         lines.append("        return status;")
