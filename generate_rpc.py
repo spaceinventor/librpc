@@ -41,6 +41,49 @@ def get_rpc_version(spec: Dict[str, Any]) -> int:
     return rpc_version
 
 
+def validate_rpc_features(spec: Dict[str, Any]) -> None:
+    rpc_version = get_rpc_version(spec)
+
+    def validate_field(field: Dict[str, Any]) -> None:
+        name = field['name']
+        field_type = field['type']
+        max_elements = field.get('max_elements', 1)
+
+        if type(max_elements) is not int or max_elements < 1:
+            raise ValueError(f"max_elements must be a positive integer for field '{name}'")
+        if rpc_version == 1 and max_elements > 1:
+            raise ValueError(
+                f"Arrays defined by max_elements are only supported with "
+                f"rpc_version 2 (field '{name}')"
+            )
+        if field_type == 'struct' and rpc_version == 1:
+            raise ValueError(
+                f"Struct fields are only supported with rpc_version 2 "
+                f"(field '{name}')"
+            )
+
+        for subfield in field.get('contents', []):
+            validate_field(subfield)
+
+    for proc in spec.get('procedures', []):
+        if rpc_version == 2 and 'maxresponses' in proc:
+            raise ValueError(
+                f"maxresponses is only supported with rpc_version 1 "
+                f"(procedure '{proc['name']}')"
+            )
+
+        if 'maxresponses' in proc:
+            maxresponses = proc['maxresponses']
+            if type(maxresponses) is not int or maxresponses < 1:
+                raise ValueError(
+                    f"maxresponses must be a positive integer "
+                    f"(procedure '{proc['name']}')"
+                )
+
+        for field in proc.get('request', []) + proc.get('response', []):
+            validate_field(field)
+
+
 def get_c_type(json_type: str) -> str:
     if json_type not in TYPE_MAPPING:
         raise ValueError(f"Unknown type: {json_type}")
@@ -1031,8 +1074,8 @@ def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str =
         else:
             raise
 
+    validate_rpc_features(spec)
     program = spec['program']
-    get_rpc_version(spec)
 
     if mode not in ('client', 'server', 'both'):
         raise ValueError("mode must be 'client', 'server', or 'both'")

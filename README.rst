@@ -166,6 +166,11 @@ Interface specifications define programs and their procedures:
 
 The required ``rpc_version`` setting selects the payload encoding for the generated client and server. Version ``1`` uses the existing fixed-width encoding; version ``2`` uses MessagePack arrays, with values ordered as declared in the request or response and nested arrays for array and struct fields. Both ends must use the same version.
 
+Version ``1`` supports bounded multiple responses through ``maxresponses``.
+Version ``2`` supports arrays declared with ``max_elements`` and fields of
+type ``struct``; it does not support ``maxresponses``. Arrays and struct
+fields are not supported in version ``1``.
+
 Supported Type Mapping
 ~~~~~~~~~~~~~~~~~~~~~~
 
