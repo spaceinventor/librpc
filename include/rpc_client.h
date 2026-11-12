@@ -4,7 +4,6 @@
 
 extern int rpc_build_request(uint16_t node, uint32_t program, uint32_t procedure, csp_conn_t ** conn, rpc_msg_t **req_msg);
 extern void rpc_send(csp_conn_t *conn, rpc_msg_t *msg);
-extern void rpc_buffer_free(rpc_msg_t *msg);
 extern int rpc_disconnect(csp_conn_t *conn);
 extern int rpc_get_reply(csp_conn_t *conn, rpc_msg_t **msg, uint32_t maxresponses, uint32_t extected_idx, uint32_t timeout);
 

@@ -32,6 +32,15 @@ TYPE_MAPPING = {
 DEFAULT_STRING_MAX = 256
 
 
+def get_rpc_version(spec: Dict[str, Any]) -> int:
+    if 'rpc_version' not in spec:
+        raise ValueError("Missing required rpc_version (must be 1 or 2)")
+    rpc_version = spec['rpc_version']
+    if type(rpc_version) is not int or rpc_version not in (1, 2):
+        raise ValueError(f"Unknown rpc_version: {rpc_version!r} (must be 1 or 2)")
+    return rpc_version
+
+
 def get_c_type(json_type: str) -> str:
     if json_type not in TYPE_MAPPING:
         raise ValueError(f"Unknown type: {json_type}")
@@ -305,6 +314,175 @@ def get_pop_lines(spec: Dict[str, Any], field: Dict[str, Any], prefix: str, msg_
     return lines
 
 
+def mpack_type_suffix(spec: Dict[str, Any], field: Dict[str, Any]) -> str:
+    field_type = get_type_size(spec, field)
+    if field_type.startswith('x'):
+        field_type = 'u' + field_type[1:]
+    elif field_type == 'f32':
+        field_type = 'float'
+    elif field_type == 'f64':
+        field_type = 'double'
+    return field_type
+
+
+def get_mpack_write_value_lines(spec: Dict[str, Any], field: Dict[str, Any], value: str, writer: str, indent: str) -> List[str]:
+    if field['type'] == 'struct':
+        contents = field.get('contents', [])
+        lines = [f"{indent}mpack_start_array({writer}, {len(contents)});"]
+        for subfield in contents:
+            lines.extend(get_mpack_write_value_lines(spec, subfield, f"{value}.{subfield['name']}", writer, indent))
+        lines.append(f"{indent}mpack_finish_array({writer});")
+        return lines
+
+    if field['type'] == 'string':
+        return [f"{indent}mpack_write_cstr({writer}, {value});"]
+
+    suffix = mpack_type_suffix(spec, field)
+    return [f"{indent}mpack_write_{suffix}({writer}, {value});"]
+
+
+def get_mpack_write_lines(spec: Dict[str, Any], field: Dict[str, Any], value: str, writer: str, indent: str = "    ") -> List[str]:
+    max_elements = field.get('max_elements', 1)
+    if max_elements <= 1:
+        return get_mpack_write_value_lines(spec, field, value, writer, indent)
+
+    index = f"i_{field['name']}"
+    lines = [
+        f"{indent}mpack_start_array({writer}, {value}_count);",
+        f"{indent}for (uint32_t {index} = 0; {index} < {value}_count; {index}++) {{",
+    ]
+    lines.extend(get_mpack_write_value_lines(spec, field, f"{value}[{index}]", writer, indent + "    "))
+    lines.extend([
+        f"{indent}}}",
+        f"{indent}mpack_finish_array({writer});",
+    ])
+    return lines
+
+
+def get_mpack_read_value_lines(spec: Dict[str, Any], field: Dict[str, Any], target: str, reader: str, indent: str) -> List[str]:
+    if field['type'] == 'struct':
+        contents = field.get('contents', [])
+        lines = [f"{indent}mpack_expect_array_match({reader}, {len(contents)});"]
+        for subfield in contents:
+            lines.extend(get_mpack_read_value_lines(spec, subfield, f"{target}.{subfield['name']}", reader, indent))
+        lines.append(f"{indent}if (mpack_reader_error({reader}) == mpack_ok) mpack_done_array({reader});")
+        return lines
+
+    if field['type'] == 'string':
+        return [
+            f"{indent}mpack_expect_str_buf({reader}, {target}, sizeof({target}));",
+            f"{indent}{target}[sizeof({target}) - 1] = '\\0';",
+        ]
+
+    suffix = mpack_type_suffix(spec, field)
+    return [f"{indent}{target} = mpack_expect_{suffix}({reader});"]
+
+
+def get_mpack_read_lines(spec: Dict[str, Any], field: Dict[str, Any], target: str, reader: str, indent: str = "    ") -> List[str]:
+    max_elements = field.get('max_elements', 1)
+    if max_elements <= 1:
+        return get_mpack_read_value_lines(spec, field, target, reader, indent)
+
+    index = f"i_{field['name']}"
+    lines = [
+        f"{indent}{target}_count = mpack_expect_array_max({reader}, {max_elements});",
+        f"{indent}for (uint32_t {index} = 0; {index} < {target}_count; {index}++) {{",
+    ]
+    lines.extend(get_mpack_read_value_lines(spec, field, f"{target}[{index}]", reader, indent + "    "))
+    lines.append(f"{indent}}}")
+    lines.append(f"{indent}if (mpack_reader_error({reader}) == mpack_ok) mpack_done_array({reader});")
+    return lines
+
+
+def get_mpack_decode_lines(spec: Dict[str, Any], fields: List[Dict[str, Any]], prefix: str, msg_name: str, indent: str = "    ") -> List[str]:
+    reader = 'reader'
+    lines = [
+        f"{indent}mpack_reader_t {reader};",
+        f"{indent}mpack_reader_init_data(&{reader}, (const char *){msg_name}->reply.data, {msg_name}->reply.data_len);",
+        f"{indent}mpack_expect_array_match(&{reader}, {len(fields)});",
+    ]
+    for field in fields:
+        lines.extend(get_mpack_read_lines(spec, field, f"{prefix}{field['name']}", f"&{reader}", indent))
+    lines.extend([
+        f"{indent}if (mpack_reader_error(&{reader}) == mpack_ok) mpack_done_array(&{reader});",
+        f"{indent}status = mpack_reader_destroy(&{reader}) == mpack_ok ? RPC_STATUS_OK : RPC_STATUS_ERR_INVALID;",
+        f"{indent}if (status != RPC_STATUS_OK) {{",
+        f"{indent}    rpc_buffer_free({msg_name});",
+        f"{indent}    rpc_disconnect(conn);",
+        f"{indent}    return status;",
+        f"{indent}}}",
+    ])
+    return lines
+
+
+def get_mpack_server_decode_lines(spec: Dict[str, Any], fields: List[Dict[str, Any]], indent: str = "            ") -> List[str]:
+    reader = 'request_reader'
+    lines = [
+        f"{indent}mpack_reader_t {reader};",
+        f"{indent}mpack_reader_init_data(&{reader}, (const char *)call->call.data, call->call.data_len);",
+        f"{indent}mpack_expect_array_match(&{reader}, {len(fields)});",
+    ]
+    for field in fields:
+        lines.extend(get_mpack_read_lines(spec, field, f"request->{field['name']}", f"&{reader}", indent))
+    lines.extend([
+        f"{indent}if (mpack_reader_error(&{reader}) == mpack_ok) mpack_done_array(&{reader});",
+        f"{indent}if (mpack_reader_destroy(&{reader}) != mpack_ok) return RPC_STATUS_ERR_INVALID;",
+    ])
+    return lines
+
+
+def get_mpack_encode_lines(spec: Dict[str, Any], fields: List[Dict[str, Any]], prefix: str, msg_name: str, is_result: bool, indent: str = "    ") -> List[str]:
+    payload = f"{msg_name}->reply" if is_result else f"{msg_name}->call"
+    payload_data = f"{payload}.data"
+    data_offset = "reply" if is_result else "call"
+    writer = 'writer'
+    lines = [
+        f"{indent}mpack_writer_t {writer};",
+        f"{indent}mpack_writer_init(&{writer}, (char *){payload_data}, CSP_BUFFER_SIZE - offsetof(rpc_msg_t, {data_offset}.data));",
+        f"{indent}mpack_start_array(&{writer}, {len(fields)});",
+    ]
+    for field in fields:
+        value = f"{prefix}{field['name']}"
+        if field.get('max_elements', 1) > 1:
+            lines.extend([
+                f"{indent}if ({value}_count > {field['max_elements']}) {{",
+                f"{indent}    mpack_writer_destroy(&{writer});",
+                f"{indent}    rpc_buffer_free({msg_name});",
+            ])
+            if not is_result:
+                lines.extend([
+                    f"{indent}    rpc_disconnect(conn);",
+                ])
+            lines.extend([
+                f"{indent}    return RPC_STATUS_ERR_INVALID;",
+                f"{indent}}}",
+            ])
+        lines.extend(get_mpack_write_lines(spec, field, value, f"&{writer}", indent))
+    lines.extend([
+        f"{indent}mpack_finish_array(&{writer});",
+        f"{indent}size_t packed_size = mpack_writer_buffer_used(&{writer});",
+        f"{indent}mpack_error_t pack_error = mpack_writer_destroy(&{writer});",
+    ])
+    if is_result:
+        lines.extend([
+            f"{indent}if (pack_error != mpack_ok || packed_size > UINT16_MAX) {{",
+            f"{indent}    rpc_buffer_free({msg_name});",
+            f"{indent}    return RPC_STATUS_ERR_INVALID;",
+            f"{indent}}}",
+            f"{indent}{payload}.data_len = (uint16_t)packed_size;",
+        ])
+    else:
+        lines.extend([
+            f"{indent}if (pack_error != mpack_ok || packed_size > UINT16_MAX) {{",
+            f"{indent}    rpc_buffer_free({msg_name});",
+            f"{indent}    rpc_disconnect(conn);",
+            f"{indent}    return RPC_STATUS_ERR_INVALID;",
+            f"{indent}}}",
+            f"{indent}{payload}.data_len = (uint16_t)packed_size;",
+        ])
+    return lines
+
+
 def get_debug_print_lines(spec: Dict[str, Any], field: Dict[str, Any], path_prefix: str, val_prefix: str, indent: str = "    ") -> List[str]:
     lines = []
     name = field['name']
@@ -504,12 +682,16 @@ def generate_server_header(spec: Dict[str, Any]) -> str:
 def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) -> str:
     program = spec['program']
     procedures = spec['procedures']
+    use_mpack = get_rpc_version(spec) == 2
 
     lines = []
     lines.append(f'#include "rpc_{program}.h"')
     lines.append("#include <rpc_client.h>")
     lines.append("#include <string.h>")
     lines.append("#include <assert.h>")
+    if use_mpack:
+        lines.append("#include <stddef.h>")
+        lines.append("#include <mpack/mpack.h>")
     if debug:
         lines.append("#include <stdio.h>")
         lines.append("#include <inttypes.h>")
@@ -605,8 +787,11 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
                 lines.extend(get_debug_print_lines(spec, field, "", "request->", "    "))
             lines.append("")
 
-        for field in proc['request']:
-            lines.extend(get_push_lines(spec, field, "request->", "request_msg", False, "    "))
+        if use_mpack:
+            lines.extend(get_mpack_encode_lines(spec, proc['request'], "request->", "request_msg", False))
+        else:
+            for field in proc['request']:
+                lines.extend(get_push_lines(spec, field, "request->", "request_msg", False, "    "))
         lines.append("")
 
         lines.append("    rpc_send(conn, request_msg);")
@@ -617,7 +802,7 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
             lines.append("    uint32_t idx = 0;")
             lines.append("    while (idx < max_req_responses) {")
 
-            if len(proc['response']) > 0:
+            if len(proc['response']) > 0 and not use_mpack:
                 lines.append("        uint16_t offset = 0;")
                 lines.append("")
 
@@ -629,8 +814,11 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
             lines.append("")
             lines.append("        /* Extract response fields */")
 
-            for field in proc['response']:
-                lines.extend(get_pop_lines(spec, field, "response[idx].", "reply_msg", "&offset", True, "        "))
+            if use_mpack:
+                lines.extend(get_mpack_decode_lines(spec, proc['response'], "response[idx].", "reply_msg", "        "))
+            else:
+                for field in proc['response']:
+                    lines.extend(get_pop_lines(spec, field, "response[idx].", "reply_msg", "&offset", True, "        "))
             lines.append("")
 
             if debug:
@@ -650,7 +838,7 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
             lines.append("")
             lines.append("    *numresponses = idx;")
         else:
-            if len(proc['response']) > 0:
+            if len(proc['response']) > 0 and not use_mpack:
                 lines.append("    uint16_t offset = 0;")
                 lines.append("")
 
@@ -662,8 +850,11 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
             lines.append("")
             lines.append("    /* Extract response fields */")
 
-            for field in proc['response']:
-                lines.extend(get_pop_lines(spec, field, "response->", "reply_msg", "&offset", True, "    "))
+            if use_mpack:
+                lines.extend(get_mpack_decode_lines(spec, proc['response'], "response->", "reply_msg"))
+            else:
+                for field in proc['response']:
+                    lines.extend(get_pop_lines(spec, field, "response->", "reply_msg", "&offset", True, "    "))
             lines.append("")
 
             if debug:
@@ -685,6 +876,7 @@ def generate_client_implementation(spec: Dict[str, Any], debug: bool = False) ->
 def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) -> str:
     program = spec['program']
     procedures = spec['procedures']
+    use_mpack = get_rpc_version(spec) == 2
 
     lines = []
     lines.append(f'#include "rpc_{program}_server.h"')
@@ -692,6 +884,9 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
     lines.append('#include <inttypes.h>')
     lines.append("#include <string.h>")
     lines.append("#include <assert.h>")
+    if use_mpack:
+        lines.append("#include <stddef.h>")
+        lines.append("#include <mpack/mpack.h>")
     if debug:
         lines.append('#include <stdio.h>')
     lines.append("")
@@ -754,12 +949,15 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
         if maxresponses > 1:
             lines.append(f"            uint32_t numresponses = {maxresponses};")
 
-        if len(proc['request']) > 0:
+        if len(proc['request']) > 0 and not use_mpack:
             lines.append("            uint16_t offset = 0;")
         lines.append("")
 
-        for field in proc['request']:
-            lines.extend(get_pop_lines(spec, field, "request->", "call", "&offset", False, "            "))
+        if use_mpack:
+            lines.extend(get_mpack_server_decode_lines(spec, proc['request']))
+        else:
+            for field in proc['request']:
+                lines.extend(get_pop_lines(spec, field, "request->", "call", "&offset", False, "            "))
         lines.append("")
 
         if debug:
@@ -772,6 +970,7 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
             lines.append(f"            {to_function_name(program, proc_name, 'host')}(request, response, &numresponses);")
             lines.append("")
             lines.append(f"            if (numresponses == 0) return sizeof({response_typedef});")
+            lines.append(f"            if (numresponses > {maxresponses}) return RPC_STATUS_ERR_INVALID;")
         else:
             lines.append(f"            {to_function_name(program, proc_name, 'host')}(request, response);")
         lines.append("")
@@ -784,8 +983,11 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
                     lines.extend(get_debug_print_lines(spec, field, "response[i_resp].", "response[i_resp].", "                "))
 
             lines.append("                rpc_msg_t *reply = rpc_result_prepare(call, numresponses, i_resp);")
-            for field in proc['response']:
-                lines.extend(get_push_lines(spec, field, "response[i_resp].", "reply", True, "                "))
+            if use_mpack:
+                lines.extend(get_mpack_encode_lines(spec, proc['response'], "response[i_resp].", "reply", True, "                "))
+            else:
+                for field in proc['response']:
+                    lines.extend(get_push_lines(spec, field, "response[i_resp].", "reply", True, "                "))
 
             lines.append(f"                rpc_send_reply(conn, reply);")
             lines.append("            }")
@@ -796,8 +998,11 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
                     lines.extend(get_debug_print_lines(spec, field, "response->", "response->", "            "))
 
             lines.append("            rpc_msg_t *reply = rpc_result_prepare(call, 1, 0);")
-            for field in proc['response']:
-                lines.extend(get_push_lines(spec, field, "response->", "reply", True, "            "))
+            if use_mpack:
+                lines.extend(get_mpack_encode_lines(spec, proc['response'], "response->", "reply", True, "            "))
+            else:
+                for field in proc['response']:
+                    lines.extend(get_push_lines(spec, field, "response->", "reply", True, "            "))
 
             lines.append(f"            rpc_send_reply(conn, reply);")
 
@@ -827,6 +1032,7 @@ def generate_files(json_file: str, output_dir: Optional[str] = None, mode: str =
             raise
 
     program = spec['program']
+    get_rpc_version(spec)
 
     if mode not in ('client', 'server', 'both'):
         raise ValueError("mode must be 'client', 'server', or 'both'")

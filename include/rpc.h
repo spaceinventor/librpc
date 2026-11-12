@@ -100,6 +100,8 @@ typedef struct rpc_msg_s {
     };
 } __attribute__((packed)) rpc_msg_t;
 
+extern void rpc_buffer_free(rpc_msg_t *msg);
+
 #ifdef __cplusplus
 }
 #endif

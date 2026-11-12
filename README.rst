@@ -128,6 +128,7 @@ Interface specifications define programs and their procedures:
     {
         program: 'program_name',           // Program identifier
         address: 0x10000000,               // Unique 32-bit program ID
+        rpc_version: 2,                    // Required: 1 (legacy) or 2 (MessagePack)
         enums: [
             {
                 name: 'some_enum',         // Name of the enum type
@@ -162,6 +163,8 @@ Interface specifications define programs and their procedures:
             }
         ]
     }
+
+The required ``rpc_version`` setting selects the payload encoding for the generated client and server. Version ``1`` uses the existing fixed-width encoding; version ``2`` uses MessagePack arrays, with values ordered as declared in the request or response and nested arrays for array and struct fields. Both ends must use the same version.
 
 Supported Type Mapping
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -308,4 +311,3 @@ Integration Steps
 3. Implement server callback functions (``*_host()`` functions)
 4. Link generated code into your application
 5. Call client functions from remote nodes or server initialization from local nodes
-
