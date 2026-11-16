@@ -412,10 +412,7 @@ def get_mpack_read_value_lines(spec: Dict[str, Any], field: Dict[str, Any], targ
         return lines
 
     if field['type'] == 'string':
-        return [
-            f"{indent}mpack_expect_str_buf({reader}, {target}, sizeof({target}));",
-            f"{indent}{target}[sizeof({target}) - 1] = '\\0';",
-        ]
+        return [f"{indent}mpack_expect_cstr({reader}, {target}, sizeof({target}));"]
 
     suffix = mpack_type_suffix(spec, field)
     return [f"{indent}{target} = mpack_expect_{suffix}({reader});"]
