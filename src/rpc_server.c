@@ -130,21 +130,6 @@ rpc_msg_t * rpc_result_prepare(rpc_msg_t *call, uint32_t amount, uint32_t idx) {
     return reply;
 }
 
-static const rpc_program_t * lookup_program_from_id(rpc_module_t *module, uint32_t id) {
-
-    const rpc_program_t *program = NULL;
-
-    /* Search the local data base initially */
-    for (uint32_t n = 0; n < module->nof_programs; n++) {
-        if (module->programs[n].program_id == id) {
-            program = &module->programs[n];
-            break;
-        }
-    }
-
-    return program;
-}
-
 static void rpc_handle_msg(csp_conn_t *conn, csp_packet_t *packet) {
 
     rpc_msg_t *req_msg = (rpc_msg_t *)packet->data;
@@ -174,21 +159,11 @@ static void rpc_handle_msg(csp_conn_t *conn, csp_packet_t *packet) {
 
             RPC_DBG("RPC-S: rpc_msg_call: data_len=%"PRId16",program=0x%"PRIX32",procedure=%"PRIu32"\n", req_msg->call.data_len, program, procedure);
 
-            /* Find a possibly matching program handler */
-            const rpc_program_t *prg = lookup_program_from_id(&global_rpc_server->module, program);
-            if (prg) {
-                /* We found a match, call the associated handler */
-                int missingdatasize = (*prg->handler)(procedure, conn, req_msg);
-                if (missingdatasize > 0) {
-                    /* The response array size is 0, send empty response as ACK */
-                    rpc_msg_t *reply = rpc_result_prepare(req_msg, 0, 0);
-                    memset(reply->reply.data, 0, missingdatasize);
-                    reply->reply.data_len = missingdatasize;
-                    rpc_send_reply(conn, reply);
-                }
-            } else {
-                /* No match found, we can not handle this request */
+            int result = rpc_dispatch_program(program, procedure, conn, req_msg);
+            if (result == RPC_STATUS_ERR_NOT_FOUND) {
                 RPC_ERR("RPC-S: No handler found for program 0x%"PRIX32"\n", program);
+            } else if (result != 0) {
+                RPC_ERR("RPC-S: Error handling program 0x%"PRIX32", procedure %"PRIu32"\n", program, procedure);
             }
         }
         break;
@@ -206,21 +181,6 @@ void rpc_send_reply(csp_conn_t *conn, rpc_msg_t *reply) {
 }
 
 static int rpc_start_server(rpc_server_t *me) {
-
-    /* Starting the server, also means parsing the programs registered */
-    extern const rpc_program_t __start_rpc_programs;
-    extern const rpc_program_t __stop_rpc_programs;
-    const rpc_program_t *iter = &__start_rpc_programs;
-    me->module.nof_programs = 0;
-    me->module.programs = &__start_rpc_programs;
-    RPC_DBG("RPC-S: Registering programs from address: %p\n", me->module.programs);
-    while (iter != &__stop_rpc_programs) {
-        RPC_DBG("  0x%08"PRIX32", '%s'\n", iter->program_id, iter->name);
-        me->module.nof_programs++;
-        iter++;
-    }
-    RPC_DBG("RPC-S: Registered %"PRId32" programs\n", me->module.nof_programs);
-
     memset(&me->sock, 0, sizeof(me->sock));
     int res;
     me->sock.opts = CSP_O_NONE;

@@ -21,75 +21,14 @@ typedef struct rpc_procedure_list_s rpc_procedure_list_t;
 struct rpc_server_s;
 typedef struct rpc_server_s rpc_server_t;
 
-/**
- * @brief RPC Server call back method prototype
- * 
- * A method of this type can be used as a call back from the RPC server
- * to handle specific procedure calls on the server side.
- * 
- * @param me A pointer to a RPC server object instance
- * @param program The program to execute a specific procedure on
- * @param procedure The procedure to execute on the specified program
- * @param conn The connection on which the call was received
- * @param call Pointer to the rpc_msg_t packet containing the call request being processed
- * @param reply Pointer to a rpc_msg_t packet which will receive the procedure return objects
- * @param ctx Call back context pointer, which will be passed along
- * @return true: call me again, false: done
- */
-typedef int rpc_server_callback_t(uint32_t procedure, csp_conn_t *conn, rpc_msg_t *call);
-
-SLIST_HEAD( rpc_program_list_s, rpc_program_s );
-typedef struct rpc_program_list_s rpc_program_list_t;
-
-typedef struct rpc_program_s {
-    uint32_t program_id;
-    char *name;
-    rpc_server_callback_t *handler;
-} rpc_program_t;
-
-#define RPC_STRINGIFY(_x) #_x
-
-/**
- * @brief RPC Program declaration macro
- * 
- * Use this macro to declare/instantiate a RPC program statically with the
- * RPC framework. The user must supply a name which will be used as a textual
- * representation of the program to the outside world alongside a unique id.
- * 
- * All instances of the rpc_program_t type will be placed in a special section
- * in memory, which will be placed by the linker, and handled by the RPC module
- * as a whole.
- * 
- * @param _nAME The name of the "program" to declare (not a string)
- * @param _pROGAMiD A globally unique ID which will represent the program
- * @param _hANDLER Pointer to an RPC server side handler (rpc_server_callback_t)
- * 
- */
-#define RPC_DECLARE_PROGRAM(_nAME, _pROGRAMiD, _hANDLER) \
-    static const \
-        __attribute__((__aligned__(__alignof__(rpc_program_t)))) \
-        rpc_program_t \
-        __attribute__((__used__)) \
-        __attribute__((section("rpc_programs"))) \
-        __rpc_program_##_nAME##_instance = { \
-            .name = RPC_STRINGIFY(_nAME), \
-            .program_id = (_pROGRAMiD), \
-            .handler = _hANDLER, \
-        };
-
-typedef struct rpc_module_s {
-    uint32_t nof_programs;
-    const rpc_program_t *programs;
-} rpc_module_t;
-
 typedef struct rpc_server_s {
     csp_socket_t sock;
-    rpc_module_t module;
 } rpc_server_t;
 
 /* Main loop server side methods */
 extern rpc_server_t *global_rpc_server;
 extern void rpc_server_main(rpc_server_t *me);
+extern int rpc_dispatch_program(uint32_t program, uint32_t procedure, csp_conn_t *conn, rpc_msg_t *call);
 
 /* Server side call handler methods */
 extern rpc_msg_t *rpc_result_prepare(rpc_msg_t *call, uint32_t amount, uint32_t idx);

@@ -14,7 +14,7 @@ The RPC library implements a lightweight, efficient Remote Procedure Call mechan
 - Support for multiple programs and procedures per node
 - Automatic code generation from JSON5 interface definitions
 - Flexible serialization of primitives, strings, and complex types
-- Built-in program discovery mechanisms
+- Generated program dispatch by program ID
 - Cross-platform compatibility (ARM/x86)
 
 Architecture
@@ -37,16 +37,16 @@ The RPC framework operates over CSP (Cubesat Space Protocol) and uses a binary m
 
 All multi-byte integers are serialized in big-endian (network byte order).
 
-Program and Procedure Registration
------------------------------------
+Program and Procedure Dispatch
+------------------------------
 
-Programs are registered statically using the ``RPC_DECLARE_PROGRAM`` macro, which places them in a special ``.rpc_programs`` section. Each program contains:
-
-- **Program ID**: Unique 32-bit identifier
-- **Program Name**: Text description
-- **Handler**: Callback function to dispatch procedures
-- **Procedures**: Array of available procedures
-- **Context Data**: Optional user-defined data passed to handler
+Server applications are selected by generated source code. Generate a program
+dispatcher from all interface specifications served by the application, and
+include its output in the target that uses ``rpc_server_main``. The generated
+dispatcher switches on program IDs and calls each generated program handler
+directly; no linker-section registration or handler function-pointer table is
+required. The dispatcher must be generated from every specification served by
+the application and compiled into the target that links the RPC server.
 
 Supported Data Types
 ====================
