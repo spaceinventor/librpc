@@ -118,7 +118,7 @@ int rpc_disconnect(csp_conn_t *conn) {
 
 int rpc_build_request(uint16_t node, uint32_t program, uint32_t procedure, csp_conn_t ** conn, rpc_msg_t **req_msg) {
 
-    *conn = csp_connect(CSP_PRIO_NORM, node, CSP_PORT_RPC_SERVER, 0, CSP_O_NONE);
+    *conn = csp_connect(CSP_PRIO_NORM, node, CSP_PORT_RPC_SERVER, 0, CSP_O_CRC32);
     if (*conn == NULL) {
         return RPC_STATUS_ERR_COULD_NOT_CONNECT;
     }
