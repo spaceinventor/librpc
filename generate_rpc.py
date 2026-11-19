@@ -713,7 +713,7 @@ def generate_server_header(spec: Dict[str, Any]) -> str:
         else:
             lines.append(f"void {to_function_name(program, proc_name, 'host')}(const {request_typedef} *request, {response_typedef} *response);")
         lines.append("")
-    lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, csp_conn_t *conn, rpc_msg_t *call_msg);")
+    lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, csp_packet_t *csp_request, rpc_msg_t *call_msg);")
     lines.append("")
     lines.append(f"#endif /* {guard} */")
     return "\n".join(lines)
@@ -946,7 +946,7 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
 
     lines.append("/* Server Handler Dispatcher */")
     program_upper = to_macro_name(program)
-    lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, csp_conn_t *conn, rpc_msg_t *call) {{")
+    lines.append(f"int rpc_handle_calls_{program}(uint32_t procedure, csp_packet_t *csp_request, rpc_msg_t *call) {{")
     lines.append("")
 
     # Create unified buffers to minimize stack and overall BSS usage
@@ -1023,13 +1023,14 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
                     lines.extend(get_debug_print_lines(spec, field, "response[i_resp].", "response[i_resp].", "                "))
 
             lines.append("                rpc_msg_t *reply = rpc_result_prepare(call, numresponses, i_resp);")
+            lines.append("                if (reply == NULL) return RPC_STATUS_ERR_NO_MEMORY;")
             if use_mpack:
                 lines.extend(get_mpack_encode_lines(spec, proc['response'], "response[i_resp].", "reply", True, "                "))
             else:
                 for field in proc['response']:
                     lines.extend(get_push_lines(spec, field, "response[i_resp].", "reply", True, "                "))
 
-            lines.append(f"                rpc_send_reply(conn, reply);")
+            lines.append(f"                rpc_send_reply(csp_request, reply);")
             lines.append("            }")
         else:
             if debug:
@@ -1038,13 +1039,14 @@ def generate_server_implementation(spec: Dict[str, Any], debug: bool = False) ->
                     lines.extend(get_debug_print_lines(spec, field, "response->", "response->", "            "))
 
             lines.append("            rpc_msg_t *reply = rpc_result_prepare(call, 1, 0);")
+            lines.append("            if (reply == NULL) return RPC_STATUS_ERR_NO_MEMORY;")
             if use_mpack:
                 lines.extend(get_mpack_encode_lines(spec, proc['response'], "response->", "reply", True, "            "))
             else:
                 for field in proc['response']:
                     lines.extend(get_push_lines(spec, field, "response->", "reply", True, "            "))
 
-            lines.append(f"            rpc_send_reply(conn, reply);")
+            lines.append(f"            rpc_send_reply(csp_request, reply);")
 
         lines.append("            break;")
         lines.append("        }")

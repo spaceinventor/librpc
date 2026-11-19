@@ -52,13 +52,13 @@ def generate_dispatch(output: Path, depfile: Path, specs):
         '#include "rpc_server.h"',
         *[f'#include "rpc_{program}_server.h"' for program, _ in programs],
         "",
-        "int rpc_dispatch_program(uint32_t program, uint32_t procedure, csp_conn_t *conn, rpc_msg_t *call) {",
+        "int rpc_dispatch_program(uint32_t program, uint32_t procedure, csp_packet_t *request, rpc_msg_t *call) {",
         "    switch (program) {",
     ]
     for program, program_id in programs:
         lines.extend([
             f"        case RPC_PROGRAM_{to_macro_name(program)}:",
-            f"            return rpc_handle_calls_{program}(procedure, conn, call);",
+            f"            return rpc_handle_calls_{program}(procedure, request, call);",
         ])
     lines.extend([
         "        default:",

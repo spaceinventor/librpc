@@ -4,8 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 
-rpc_server_t *global_rpc_server = NULL;
-
 #define be8toh(x) (x)
 #define htobe8(x) (x)
 
@@ -113,16 +111,18 @@ void rpc_result_push_buffer(const uint8_t *value, uint16_t len, rpc_msg_t *msg) 
 rpc_msg_t * rpc_result_prepare(rpc_msg_t *call, uint32_t amount, uint32_t idx) {
 
     csp_packet_t *packet = csp_buffer_get(0);
-    rpc_msg_t *reply = (rpc_msg_t *)packet->data;
-    if (packet) {
-        reply->type = RPC_MSG_REPLY;
-        reply->version = RPC_VERSION;
-        reply->xid = call->xid;
-        reply->reply.data_len = htobe32(0);
-        reply->reply.amount = htobe32(0);
-        reply->reply.idx = htobe32(0);
-        packet->length = sizeof(reply->type) + sizeof(reply->version) + sizeof(reply->xid) + sizeof(reply->reply);
+    if (packet == NULL) {
+        return NULL;
     }
+
+    rpc_msg_t *reply = (rpc_msg_t *)packet->data;
+    reply->type = RPC_MSG_REPLY;
+    reply->version = RPC_VERSION;
+    reply->xid = call->xid;
+    reply->reply.data_len = htobe32(0);
+    reply->reply.amount = htobe32(0);
+    reply->reply.idx = htobe32(0);
+    packet->length = sizeof(reply->type) + sizeof(reply->version) + sizeof(reply->xid) + sizeof(reply->reply);
 
     reply->reply.amount = htobe32(amount);
     reply->reply.idx = htobe32(idx);
@@ -130,7 +130,7 @@ rpc_msg_t * rpc_result_prepare(rpc_msg_t *call, uint32_t amount, uint32_t idx) {
     return reply;
 }
 
-static void rpc_handle_msg(csp_conn_t *conn, csp_packet_t *packet) {
+static void rpc_handle_msg(csp_packet_t *packet) {
 
     rpc_msg_t *req_msg = (rpc_msg_t *)packet->data;
 
@@ -159,7 +159,7 @@ static void rpc_handle_msg(csp_conn_t *conn, csp_packet_t *packet) {
 
             RPC_DBG("RPC-S: rpc_msg_call: data_len=%"PRId16",program=0x%"PRIX32",procedure=%"PRIu32"\n", req_msg->call.data_len, program, procedure);
 
-            int result = rpc_dispatch_program(program, procedure, conn, req_msg);
+            int result = rpc_dispatch_program(program, procedure, packet, req_msg);
             if (result == RPC_STATUS_ERR_NOT_FOUND) {
                 RPC_ERR("RPC-S: No handler found for program 0x%"PRIX32"\n", program);
             } else if (result != 0) {
@@ -170,92 +170,46 @@ static void rpc_handle_msg(csp_conn_t *conn, csp_packet_t *packet) {
     }
 }
 
-void rpc_send_reply(csp_conn_t *conn, rpc_msg_t *reply) {
-
+void rpc_send_reply(const csp_packet_t *request, rpc_msg_t *reply) {
     csp_packet_t *packet = (csp_packet_t *)((uint8_t*)reply - offsetof(csp_packet_t, data));
 
     packet->length += reply->reply.data_len;
     reply->reply.data_len = htobe16(reply->reply.data_len);
 
-    csp_send(conn, packet);
+    csp_sendto_reply(request, packet, CSP_O_SAME);
 }
 
-static int rpc_start_server(rpc_server_t *me) {
-    memset(&me->sock, 0, sizeof(me->sock));
-    int res;
-    me->sock.opts = CSP_O_NONE;
-    res = csp_bind(&me->sock, CSP_PORT_RPC_SERVER);
-    if (res != CSP_ERR_NONE) {
-        if (res == CSP_ERR_INVAL) return RPC_STATUS_ERR_INVALID;
-        else if (res == CSP_ERR_USED) return RPC_STATUS_ERR_INUSE;
-        else return RPC_STATUS_ERR_INVALID;
-    }
-
-    /* Create a backlog of 1 connection */
-    csp_listen(&me->sock, 1);
-
-    global_rpc_server = me;
-
-    return RPC_STATUS_OK;
-}
-
-static csp_conn_t * rpc_waitfor_connections(rpc_server_t *me) {
-
-    csp_conn_t *conn = csp_accept(&me->sock, CSP_MAX_TIMEOUT);
-
-    if (!conn) {
-        RPC_ERR("RPC-S: Error accepting incoming connection.\n");
-        return conn;
-    }
-
-    RPC_DBG("RPC-S: Incoming connection from: %"PRIu16":%"PRIu16"\n", csp_conn_src(conn), csp_conn_sport(conn));
-
-    return conn;
-}
-
-static bool rpc_handle_connection(csp_conn_t *conn) {
-
-    /* Read request packets on connection */
-    csp_packet_t *request = csp_read(conn, 0);
-    if (NULL == request) {
-        /* The connection is lost, tell the caller */
-        RPC_DBG("RPC-S: Client disconnected or timeout.\n");
-        return false;
-    }
-
-    RPC_DBG("RPC-S: Handle message\n");
-    /* Handle the RPC request (call) and send the reply */
-    rpc_handle_msg(conn, request);
-
-    /* Free the request packet */
-    csp_buffer_free(request);
-
-    /* We still have a valid connection */
-    return true;
-}
-
-void rpc_server_main(rpc_server_t *me) {
-
-    if (rpc_start_server(me) != CSP_ERR_NONE) {
-        printf("RPC: Could not start the RPC server\n");
+void rpc_server_callback(csp_packet_t *packet) {
+    if (packet == NULL) {
         return;
     }
 
-    /* Wait for connections and then process packets on the connection */
-    printf("RPC: Starting the server loop...\n");
+    rpc_handle_msg(packet);
+    csp_buffer_free(packet);
+}
+
+int rpc_server_register(void) {
+    return csp_bind_callback(rpc_server_callback, CSP_PORT_RPC_SERVER);
+}
+
+int rpc_server_main(void) {
+
+    csp_socket_t sock = {};
+    sock.opts = CSP_O_NONE;
+    int res = csp_bind(&sock, CSP_PORT_RPC_SERVER);
+    if (res == CSP_ERR_INVAL) return RPC_STATUS_ERR_INVALID;
+    else if (res == CSP_ERR_USED) return RPC_STATUS_ERR_INUSE;
+    else if (res != CSP_ERR_NONE) return RPC_STATUS_ERR_INVALID;
+
+    /* Create a backlog of 1 connection */
+    csp_listen(&sock, 1);
 
     while(true) {
-        /* Wait for a new connection, 10 s timeout */
-        csp_conn_t *conn = rpc_waitfor_connections(me);
-        if (conn == NULL) {
-            /* Timeout, try again */
-            continue;
+        csp_conn_t *conn = csp_accept(&sock, CSP_MAX_TIMEOUT);
+        csp_packet_t *packet;
+        while ((packet = csp_read(conn, 0)) != NULL) {
+            rpc_server_callback(packet);
         }
-
-        /* Keep calling the RPC connection handler, until we dont have a connection */
-        rpc_handle_connection(conn);
-
-        /* Close our end of the connection and loop */
         csp_close(conn);
     }
 }
